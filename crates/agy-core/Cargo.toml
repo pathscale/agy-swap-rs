@@ -1,0 +1,22 @@
+[package]
+name = "agy-core"
+publish = ["crates-io"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "../../README.md"
+description = "no_std account store, vault, OAuth PKCE, quota telemetry, routing, and isolated overlay engine for agy-swap-rs"
+keywords = ["oauth", "cli", "no-std", "nagoya"]
+categories = ["command-line-utilities", "no-std"]
+
+[dependencies]
+ekostd = { workspace = true }
+nagoya = { workspace = true }
+nago-rustls = { workspace = true }
+nago-http = { workspace = true }
+ps-rustcrypto = { workspace = true }
+webpki-roots = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

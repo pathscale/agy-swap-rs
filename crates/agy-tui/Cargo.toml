@@ -1,0 +1,15 @@
+[package]
+name = "agy-tui"
+publish = ["crates-io"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "../../README.md"
+description = "no_std double-buffered terminal UI surface, diffing ANSI renderer, and inline mouse hit-map over ekostd"
+keywords = ["tui", "terminal", "no-std", "ansi"]
+categories = ["command-line-interface", "no-std"]
+
+[dependencies]
+ekostd = { workspace = true }
