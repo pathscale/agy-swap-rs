@@ -258,11 +258,7 @@ fn decode_plain_or_ctrl(buf: &[u8], flush: bool) -> Option<(Option<(Key, Modifie
                 }
             }
             if buf.len() < need {
-                return if flush {
-                    Some((None, buf.len()))
-                } else {
-                    None
-                };
+                return if flush { Some((None, buf.len())) } else { None };
             }
             match core::str::from_utf8(&buf[..need]) {
                 Ok(s) => {
@@ -361,7 +357,10 @@ fn decode_csi(params: &[u8], final_byte: u8) -> Option<Event> {
         };
         return Some(Event::Mouse(MouseEvent { kind, x, y, mods }));
     }
-    if params.first().map_or(false, |b| matches!(b, b'?' | b'>' | b'=')) {
+    if params
+        .first()
+        .is_some_and(|b| matches!(b, b'?' | b'>' | b'='))
+    {
         return None;
     }
     let mut nums = [0u16; 4];

@@ -123,7 +123,7 @@ pub fn diff_ansi(prev: Option<&Surface>, next: &Surface, sync_output: bool, out:
     if sync_output {
         out.extend_from_slice(b"\x1b[?2026h");
     }
-    let same_dims = prev.map_or(false, |p| p.width() == w && p.height() == h);
+    let same_dims = prev.is_some_and(|p| p.width() == w && p.height() == h);
     let prev_surf = if same_dims { prev } else { None };
     let mut cur_style: Option<Style> = None;
     let mut cur_pos: Option<(u16, u16)> = None;
@@ -141,7 +141,7 @@ pub fn diff_ansi(prev: Option<&Surface>, next: &Surface, sync_output: bool, out:
                 x += 1;
                 continue;
             }
-            let is_wide_pair = x + 1 < w && next.get(x + 1, y).map_or(false, |c| c.continuation);
+            let is_wide_pair = x + 1 < w && next.get(x + 1, y).is_some_and(|c| c.continuation);
             let step: u16 = if is_wide_pair { 2 } else { 1 };
             let unchanged = match prev_surf {
                 Some(p) => {

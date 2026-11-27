@@ -263,8 +263,7 @@ fn query_winsize(out_fd: i32, in_fd: i32, fallback: (u16, u16)) -> (u16, u16) {
     {
         return (ws.ws_col, ws.ws_row);
     }
-    if eko::file::ioctl_ptr(in_fd, sys::TIOCGWINSZ, ptr).is_ok() && ws.ws_col > 0 && ws.ws_row > 0
-    {
+    if eko::file::ioctl_ptr(in_fd, sys::TIOCGWINSZ, ptr).is_ok() && ws.ws_col > 0 && ws.ws_row > 0 {
         return (ws.ws_col, ws.ws_row);
     }
     let cols = eko::env::var("COLUMNS")
@@ -428,7 +427,7 @@ impl Terminal {
             return Ok(ev);
         }
         let wait_ms = if self.parser.has_pending() {
-            if timeout_ms >= 0 && timeout_ms < 25 {
+            if (0..25).contains(&timeout_ms) {
                 timeout_ms
             } else {
                 25

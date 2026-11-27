@@ -21,20 +21,16 @@ pub const DEFAULT_FRESH_QUOTA_SECS: i64 = 1800;
 /// Account selection strategy when multiple accounts are eligible.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[derive(Default)]
 pub enum RankingPolicy {
     /// Keep the active or primary account while it remains healthy.
+    #[default]
     Sticky,
     /// Pick the candidate with the highest remaining quota percentage.
     Balanced,
     /// Rotate deterministically after the active account in slot order.
     #[serde(alias = "round_robin", alias = "roundrobin")]
     RoundRobin,
-}
-
-impl Default for RankingPolicy {
-    fn default() -> Self {
-        Self::Sticky
-    }
 }
 
 impl RankingPolicy {
@@ -87,19 +83,15 @@ impl FromStr for RankingPolicy {
 /// Enforcement behavior when a directory binding matches the working directory.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum BindMode {
     /// Print or report the recommended account without switching.
     Recommend,
     /// Prompt the operator before switching.
+    #[default]
     Prompt,
     /// Automatically switch the active session before launching.
     Auto,
-}
-
-impl Default for BindMode {
-    fn default() -> Self {
-        Self::Prompt
-    }
 }
 
 impl BindMode {
@@ -149,17 +141,13 @@ impl FromStr for BindMode {
 /// Global or command-level session failover mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum SwitchMode {
     /// Report recommended switches without rewriting active session files.
+    #[default]
     Manual,
     /// Automatically switch active session credentials on failover.
     Auto,
-}
-
-impl Default for SwitchMode {
-    fn default() -> Self {
-        Self::Manual
-    }
 }
 
 impl SwitchMode {
@@ -206,19 +194,15 @@ impl FromStr for SwitchMode {
 /// Combinator for multi-pool failover evaluation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum PoolMatchMode {
     /// Fail over when any checked pool is exhausted; replacement must have all checked pools available.
     #[serde(alias = "ANY")]
+    #[default]
     Any,
     /// Fail over only when all checked pools are exhausted; replacement needs any checked pool available.
     #[serde(alias = "ALL")]
     All,
-}
-
-impl Default for PoolMatchMode {
-    fn default() -> Self {
-        Self::Any
-    }
 }
 
 impl PoolMatchMode {
@@ -265,9 +249,11 @@ impl FromStr for PoolMatchMode {
 /// Cross-account and cross-family route resolution preference.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
+#[derive(Default)]
 pub enum RouteStrategy {
     /// Prefer switching accounts to preserve the requested model family before falling back to another family.
     #[serde(alias = "same_family_first")]
+    #[default]
     SameFamilyFirst,
     /// Prefer falling back to another model family on the active account before switching accounts.
     #[serde(alias = "same_account_first")]
@@ -275,12 +261,6 @@ pub enum RouteStrategy {
     /// Never substitute another model family; switch accounts or report `no_route`.
     #[serde(alias = "strict_family")]
     StrictFamily,
-}
-
-impl Default for RouteStrategy {
-    fn default() -> Self {
-        Self::SameFamilyFirst
-    }
 }
 
 impl RouteStrategy {
@@ -501,7 +481,9 @@ fn find_named_pool<'a>(snap: &'a QuotaSnapshot, query: &str) -> Option<&'a PoolQ
             return Some(argon);
         }
     }
-    snap.extra_pools.iter().find(|p| p.name.eq_ignore_ascii_case(q))
+    snap.extra_pools
+        .iter()
+        .find(|p| p.name.eq_ignore_ascii_case(q))
 }
 
 /// Evaluate an account's cached quota pools under `ANY` vs `ALL` semantics.
@@ -638,15 +620,24 @@ fn evaluate_candidate(
     profile: Option<&Profile>,
     now_unix: i64,
 ) -> (f64, bool, bool) {
-    if account.disabled || account.verify_url.is_some() || account.is_cooled_down(family, now_unix) {
+    if account.disabled || account.verify_url.is_some() || account.is_cooled_down(family, now_unix)
+    {
         return (0.0, false, false);
     }
     let req_pct = f64::from(effective_account_threshold(account, threshold_pct, profile));
     if let Some(pct) = account_fresh_score(account, family, now_unix) {
-        let ok = if req_pct <= 0.0 { pct > 0.0 } else { pct > req_pct };
+        let ok = if req_pct <= 0.0 {
+            pct > 0.0
+        } else {
+            pct > req_pct
+        };
         (pct, ok, true)
     } else if let Some(pct) = account.family_pct(family) {
-        let ok = if req_pct <= 0.0 { pct > 0.0 } else { pct > req_pct };
+        let ok = if req_pct <= 0.0 {
+            pct > 0.0
+        } else {
+            pct > req_pct
+        };
         (pct, false, ok)
     } else {
         (50.0, false, true)
@@ -780,7 +771,10 @@ pub fn recommend(
             {
                 return Recommendation {
                     selected_email: Some(found.clone()),
-                    reason: format!("profile '{}' primary selected (quota unverified)", prof.name),
+                    reason: format!(
+                        "profile '{}' primary selected (quota unverified)",
+                        prof.name
+                    ),
                     candidates,
                 };
             }
@@ -894,9 +888,11 @@ pub fn select_next(
                 }
                 Some(best.0)
             }
-            RankingPolicy::Sticky | RankingPolicy::RoundRobin => {
-                Some(pick_round_robin(&accounts.order, &fresh_other, active_email))
-            }
+            RankingPolicy::Sticky | RankingPolicy::RoundRobin => Some(pick_round_robin(
+                &accounts.order,
+                &fresh_other,
+                active_email,
+            )),
         };
     }
 

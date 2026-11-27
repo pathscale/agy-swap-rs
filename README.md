@@ -44,6 +44,14 @@ agy-swap-rs limits
 agy-swap-rs limits --refresh
 ```
 
+## Image generation
+
+Generate an image in an account's isolated overlay `HOME` without touching `~/.gemini` (polling the brain directory, converting/cropping to PNG via `ffmpeg` when available, and printing a single-line JSON report):
+
+```sh
+agy-swap-rs --use-account=1 image --prompt "isometric blueprint of a coastal lighthouse at dusk" --out ./lighthouse.png --width 1280 --height 720
+```
+
 ## Session Isolation & `~/.gemini` Boundary
 
 - All `agy-swap-rs` metadata, encrypted/vault secrets, audit history, and per-account overlay homes live strictly under `~/.config/agy-swap-rs` (`0700` directories, `0600` files).

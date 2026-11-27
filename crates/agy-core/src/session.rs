@@ -16,11 +16,11 @@ use eko::file::File;
 use eko::path::Path;
 use serde_json::{Map, Value};
 
-use crate::model::{Account, Accounts, normalize_email};
+use crate::model::{normalize_email, Account, Accounts};
 use crate::oauth::TokenBundle;
-use crate::paths::{Paths, clean_path_str, hex_encode, join_path, sha256_hex, wall_unix_ns};
-use crate::store::{FileLock, Store, atomic_write_mode, atomic_write_private, ensure_private_dir};
-use crate::vault::{Vault, keychain_delete, keychain_get, keychain_set};
+use crate::paths::{clean_path_str, hex_encode, join_path, sha256_hex, wall_unix_ns, Paths};
+use crate::store::{atomic_write_mode, atomic_write_private, ensure_private_dir, FileLock, Store};
+use crate::vault::{keychain_delete, keychain_get, keychain_set, Vault};
 use crate::{Error, Result};
 
 const GEMINI_KEYRING_SERVICE: &str = "gemini";
@@ -178,7 +178,12 @@ fn sync_ide_onboarding_email(home: &str, email: &str) {
             "UPDATE ItemTable SET value = CAST(X'{hex_val}' AS TEXT) WHERE key = 'google.google-antigravity';"
         );
         let _ = Command::new("sqlite3")
-            .args(["-cmd", ".timeout 1500", db_path.as_str(), update_sql.as_str()])
+            .args([
+                "-cmd",
+                ".timeout 1500",
+                db_path.as_str(),
+                update_sql.as_str(),
+            ])
             .output();
     }
 }
@@ -655,8 +660,8 @@ impl SessionManager {
         let default_bin = join_path(&self.paths.home, ".local/bin/agy");
         let default_libexec = join_path(&self.paths.home, ".local/libexec/agy");
 
-        let is_symlink = (lmeta.mode() as eko::libc::mode_t & eko::libc::S_IFMT)
-            == eko::libc::S_IFLNK;
+        let is_symlink =
+            (lmeta.mode() as eko::libc::mode_t & eko::libc::S_IFMT) == eko::libc::S_IFLNK;
         if is_symlink {
             let Ok(resolved_pb) = eko::file::canonicalize(&trimmed) else {
                 return Ok(false);
@@ -690,16 +695,17 @@ impl SessionManager {
         if header.is_empty() {
             return Ok(false);
         }
-        let (backing_bin, explicit_real_ref) = if trimmed == default_bin && !default_libexec.is_empty() {
-            (default_libexec, None)
-        } else {
-            let dir = Path::new(&trimmed)
-                .parent()
-                .and_then(|p| p.to_str())
-                .unwrap_or(".");
-            let real_path = join_path(dir, ".agy.real");
-            (real_path.clone(), Some(real_path))
-        };
+        let (backing_bin, explicit_real_ref) =
+            if trimmed == default_bin && !default_libexec.is_empty() {
+                (default_libexec, None)
+            } else {
+                let dir = Path::new(&trimmed)
+                    .parent()
+                    .and_then(|p| p.to_str())
+                    .unwrap_or(".");
+                let real_path = join_path(dir, ".agy.real");
+                (real_path.clone(), Some(real_path))
+            };
 
         if is_native_executable(&header) {
             move_or_copy_executable(&trimmed, &backing_bin)?;
@@ -730,8 +736,8 @@ impl SessionManager {
             return Ok(false);
         }
         let real_ref = extract_wrapper_real_command(&text).or(explicit_real_ref);
-        let skip_perms = text.contains("AGY_NORMAL_MODE")
-            || text.contains("--dangerously-skip-permissions");
+        let skip_perms =
+            text.contains("AGY_NORMAL_MODE") || text.contains("--dangerously-skip-permissions");
         let script = build_agy_launcher_script(
             real_ref.as_deref(),
             preferred_swap.as_deref(),
@@ -833,7 +839,8 @@ impl SessionManager {
             let Ok(surface_bundle) = TokenBundle::parse(&raw) else {
                 continue;
             };
-            let Some(owner_email) = self.match_account_for_bundle(&accounts, vault, &surface_bundle)
+            let Some(owner_email) =
+                self.match_account_for_bundle(&accounts, vault, &surface_bundle)
             else {
                 continue;
             };

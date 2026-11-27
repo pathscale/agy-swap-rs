@@ -1,6 +1,7 @@
 pub(crate) extern crate alloc;
 
 pub mod deck;
+mod refresher;
 pub mod state;
 pub mod theme;
 pub mod views;
@@ -80,7 +81,10 @@ fn open_https_browser(url: &str) -> Result<(), String> {
     let opener = "open";
     #[cfg(not(target_os = "macos"))]
     let opener = "xdg-open";
-    match eko::command::Command::new(opener).arg(url.as_bytes()).output() {
+    match eko::command::Command::new(opener)
+        .arg(url.as_bytes())
+        .output()
+    {
         Some(out) if out.success() => Ok(()),
         Some(out) => Err(format!("{opener} exited with code {}", out.code)),
         None => Err(format!("failed to execute {opener}")),
@@ -97,12 +101,16 @@ fn ensure_quota_service(slot: &mut Option<QuotaService>) -> Result<&mut QuotaSer
         let http = HttpClient::new().map_err(|e| e.to_string())?;
         *slot = Some(QuotaService::new(http));
     }
-    slot.as_mut().ok_or_else(|| "quota service unavailable".to_string())
+    slot.as_mut()
+        .ok_or_else(|| "quota service unavailable".to_string())
 }
 
 fn select_email_in_state(state: &mut DeckState, target_email: &str) {
     let vis = state.visible_emails();
-    if let Some(pos) = vis.iter().position(|e| e.eq_ignore_ascii_case(target_email)) {
+    if let Some(pos) = vis
+        .iter()
+        .position(|e| e.eq_ignore_ascii_case(target_email))
+    {
         state.selected = pos;
         state.armed_row_click = None;
     }
@@ -123,12 +131,19 @@ fn do_switch_account(
         .map(ToString::to_string)
         .unwrap_or_else(|| email.to_string());
     let Some(acc) = accounts.get(&resolved) else {
-        state.show_toast(format!("Account {email} not found"), ToastLevel::Error, now_ms);
+        state.show_toast(
+            format!("Account {email} not found"),
+            ToastLevel::Error,
+            now_ms,
+        );
         return;
     };
     let Some(token) = lookup_account_token(acc, vault) else {
         state.show_toast(
-            format!("No OAuth token in vault for {} - press a to login", acc.email),
+            format!(
+                "No OAuth token in vault for {} - press a to login",
+                acc.email
+            ),
             ToastLevel::Error,
             now_ms,
         );
@@ -168,7 +183,11 @@ fn do_delete_account(
 ) {
     let mut accounts = store.load().unwrap_or_else(|_| state.accounts.clone());
     let Some(removed) = accounts.remove(email) else {
-        state.show_toast(format!("Account {email} not found"), ToastLevel::Warn, now_ms);
+        state.show_toast(
+            format!("Account {email} not found"),
+            ToastLevel::Warn,
+            now_ms,
+        );
         return;
     };
     if let Err(err) = store.save(&mut accounts) {
@@ -185,17 +204,21 @@ fn do_delete_account(
         "removed from operator deck",
     );
     state.reload_from_disk(paths);
-    state.show_toast(format!("Removed {}", removed.email), ToastLevel::Info, now_ms);
+    state.show_toast(
+        format!("Removed {}", removed.email),
+        ToastLevel::Info,
+        now_ms,
+    );
 }
 
-fn do_rotate_next(
-    store: &Store,
-    state: &mut DeckState,
-    now_ms: u64,
-) {
+fn do_rotate_next(store: &Store, state: &mut DeckState, now_ms: u64) {
     let accounts = store.load().unwrap_or_else(|_| state.accounts.clone());
     if accounts.is_empty() {
-        state.show_toast("No saved accounts - press a to login", ToastLevel::Warn, now_ms);
+        state.show_toast(
+            "No saved accounts - press a to login",
+            ToastLevel::Warn,
+            now_ms,
+        );
         return;
     }
     let settings = store.load_settings().unwrap_or_default();
@@ -208,7 +231,11 @@ fn do_rotate_next(
         settings.min_remaining_pct,
         now_unix,
     ) else {
-        state.show_toast("No eligible standby account available", ToastLevel::Warn, now_ms);
+        state.show_toast(
+            "No eligible standby account available",
+            ToastLevel::Warn,
+            now_ms,
+        );
         return;
     };
     select_email_in_state(state, &next_email);
@@ -216,12 +243,7 @@ fn do_rotate_next(
     state.modal = Modal::ConfirmSwitch { email: next_email };
 }
 
-fn harvest_all_overlays(
-    paths: &Paths,
-    store: &Store,
-    vault: &Vault,
-    accounts: &Accounts,
-) -> bool {
+fn harvest_all_overlays(paths: &Paths, store: &Store, vault: &Vault, accounts: &Accounts) -> bool {
     let mut any = false;
     for email in &accounts.order {
         if matches!(harvest_overlay_home(paths, store, vault, email), Ok(true)) {
@@ -279,7 +301,11 @@ fn do_launch_isolated_agy(
             select_email_in_state(state, &target);
             state.show_toast(
                 format!("Isolated agy ({target}) exited with status {code}"),
-                if code == 0 { ToastLevel::Success } else { ToastLevel::Warn },
+                if code == 0 {
+                    ToastLevel::Success
+                } else {
+                    ToastLevel::Warn
+                },
                 now_ms,
             );
         }
@@ -305,58 +331,27 @@ fn do_refresh_all(
     store: &Store,
     vault: &Vault,
     state: &mut DeckState,
-    quota_svc: &mut Option<QuotaService>,
+    _quota_svc: &mut Option<QuotaService>,
     force: bool,
     now_ms: u64,
 ) {
     if is_offline() {
-        state.show_toast("Offline mode enabled (AGY_SWAP_OFFLINE=1)", ToastLevel::Warn, now_ms);
-        return;
-    }
-    let mut accounts = store.load().unwrap_or_else(|_| state.accounts.clone());
-    let _ = harvest_all_overlays(paths, store, vault, &accounts);
-    if accounts.is_empty() {
-        state.show_toast("No saved accounts to refresh", ToastLevel::Info, now_ms);
-        return;
-    }
-    let svc = match ensure_quota_service(quota_svc) {
-        Ok(s) => s,
-        Err(err) => {
-            state.show_toast(format!("HTTP client failed - {err}"), ToastLevel::Error, now_ms);
-            return;
-        }
-    };
-    let now_unix = agy_core::wall_unix_secs();
-    let results = svc.refresh_all(&mut accounts, vault, force, now_unix);
-    let mut ok_count = 0usize;
-    let mut err_count = 0usize;
-    let mut first_err = String::new();
-    for (_, res) in results {
-        match res {
-            Ok(()) => ok_count += 1,
-            Err(e) => {
-                if first_err.is_empty() {
-                    first_err = e.to_string();
-                }
-                err_count += 1;
-            }
-        }
-    }
-    let _ = store.save(&mut accounts);
-    state.reload_from_disk(paths);
-    if err_count == 0 {
         state.show_toast(
-            format!("Refreshed {ok_count} account(s)"),
-            ToastLevel::Success,
-            now_ms,
-        );
-    } else {
-        state.show_toast(
-            format!("Refreshed {ok_count}, failed {err_count} - {first_err}"),
+            "Offline mode enabled (AGY_SWAP_OFFLINE=1)",
             ToastLevel::Warn,
             now_ms,
         );
+        return;
     }
+    if state.accounts.is_empty() {
+        state.show_toast("No saved accounts to refresh", ToastLevel::Info, now_ms);
+        return;
+    }
+    // runs on the refresh thread; the outcome arrives through apply_refresh_outcomes
+    refresher::with(paths, store, vault, |r| {
+        r.submit(refresher::Job::All { force })
+    });
+    state.refreshing = true;
 }
 
 fn do_refresh_selected(
@@ -364,7 +359,7 @@ fn do_refresh_selected(
     store: &Store,
     vault: &Vault,
     state: &mut DeckState,
-    quota_svc: &mut Option<QuotaService>,
+    _quota_svc: &mut Option<QuotaService>,
     now_ms: u64,
 ) {
     let Some(email) = state.selected_email() else {
@@ -372,103 +367,123 @@ fn do_refresh_selected(
         return;
     };
     if is_offline() {
-        state.show_toast("Offline mode enabled (AGY_SWAP_OFFLINE=1)", ToastLevel::Warn, now_ms);
+        state.show_toast(
+            "Offline mode enabled (AGY_SWAP_OFFLINE=1)",
+            ToastLevel::Warn,
+            now_ms,
+        );
         return;
     }
-    let svc = match ensure_quota_service(quota_svc) {
-        Ok(s) => s,
-        Err(err) => {
-            state.show_toast(format!("HTTP client failed - {err}"), ToastLevel::Error, now_ms);
-            return;
-        }
-    };
-    let _ = harvest_overlay_home(paths, store, vault, &email);
-    let mut accounts = store.load().unwrap_or_else(|_| state.accounts.clone());
-    let now_unix = agy_core::wall_unix_secs();
-    let Some(acc) = accounts.get_mut(&email) else {
-        return;
-    };
-    let outcome = svc.refresh_account(acc, vault, now_unix);
-    let _ = store.save(&mut accounts);
-    state.reload_from_disk(paths);
-    match outcome {
-        Ok(_) => {
-            state.show_toast(
-                format!("Refreshed quota for {email}"),
-                ToastLevel::Success,
-                now_ms,
-            );
-        }
-        Err(err) => {
-            state.show_toast(
-                format!("Refresh {email} failed - {err}"),
-                ToastLevel::Warn,
-                now_ms,
-            );
-        }
-    }
+    refresher::with(paths, store, vault, |r| {
+        r.submit(refresher::Job::One(email))
+    });
+    state.refreshing = true;
 }
 
+/// Queue a background refresh of the first due account (active first, then the selected one, then the rest).
+/// Never blocks: nothing is queued while a refresh is still running.
 fn do_refresh_one_due(
     paths: &Paths,
     store: &Store,
     vault: &Vault,
     state: &mut DeckState,
-    quota_svc: &mut Option<QuotaService>,
+    _quota_svc: &mut Option<QuotaService>,
 ) -> bool {
-    if is_offline() || state.accounts.is_empty() {
+    if is_offline()
+        || state.accounts.is_empty()
+        || refresher::with(paths, store, vault, |r| r.busy())
+    {
         return false;
     }
-    if harvest_all_overlays(paths, store, vault, &state.accounts) {
-        state.reload_from_disk(paths);
-    }
-    let Ok(svc) = ensure_quota_service(quota_svc) else {
-        return false;
-    };
-    let now_unix = agy_core::wall_unix_secs();
     let mut candidates: Vec<String> = Vec::new();
+    let push = |em: &str, list: &mut Vec<String>| {
+        if !list.iter().any(|c| c.eq_ignore_ascii_case(em)) {
+            list.push(em.to_string());
+        }
+    };
     if let Some(ref act) = state.active_email {
-        candidates.push(act.clone());
+        push(act, &mut candidates);
     }
     if let Some(sel) = state.selected_email() {
-        if !candidates.iter().any(|c| c.eq_ignore_ascii_case(&sel)) {
-            candidates.push(sel);
-        }
+        push(&sel, &mut candidates);
     }
     for em in &state.accounts.order {
-        if !candidates.iter().any(|c| c.eq_ignore_ascii_case(em)) {
-            candidates.push(em.clone());
+        push(em, &mut candidates);
+    }
+    candidates.retain(|em| {
+        state
+            .accounts
+            .get(em)
+            .is_some_and(|acc| !acc.disabled && acc.verify_url.is_none() && state.has_token(acc))
+    });
+    if candidates.is_empty() {
+        return false;
+    }
+    let active = state.active_email.clone();
+    refresher::with(paths, store, vault, |r| {
+        r.submit(refresher::Job::Due { candidates, active })
+    });
+    false
+}
+
+/// Apply finished background refreshes: reload, toast, clear the busy flag. Returns true when the deck must redraw.
+fn apply_refresh_outcomes(
+    paths: &Paths,
+    store: &Store,
+    vault: &Vault,
+    state: &mut DeckState,
+    now_ms: u64,
+) -> bool {
+    let mut changed = false;
+    while let Some(out) = refresher::with(paths, store, vault, |r| r.try_recv()) {
+        changed = true;
+        state.reload_from_disk(paths);
+        match out {
+            refresher::Outcome::All { ok, err: 0, .. } => {
+                state.show_toast(
+                    format!("Refreshed {ok} account(s)"),
+                    ToastLevel::Success,
+                    now_ms,
+                );
+            }
+            refresher::Outcome::All { ok, err, first_err } => {
+                state.show_toast(
+                    format!("Refreshed {ok}, failed {err} - {first_err}"),
+                    ToastLevel::Warn,
+                    now_ms,
+                );
+            }
+            refresher::Outcome::One { email, err: None } => {
+                state.show_toast(
+                    format!("Refreshed quota for {email}"),
+                    ToastLevel::Success,
+                    now_ms,
+                );
+            }
+            refresher::Outcome::One {
+                email,
+                err: Some(e),
+            } => {
+                state.show_toast(
+                    format!("Refresh {email} failed - {e}"),
+                    ToastLevel::Warn,
+                    now_ms,
+                );
+            }
+            refresher::Outcome::Due => {}
+            refresher::Outcome::Failed(e) => {
+                state.show_toast(
+                    format!("HTTP client failed - {e}"),
+                    ToastLevel::Error,
+                    now_ms,
+                );
+            }
         }
     }
-    let mut due_target: Option<String> = None;
-    for em in &candidates {
-        let Some(acc) = state.accounts.get(em) else {
-            continue;
-        };
-        if acc.disabled || acc.verify_url.is_some() || !state.has_token(acc) {
-            continue;
-        }
-        let is_active = state
-            .active_email
-            .as_deref()
-            .map(|a| a.eq_ignore_ascii_case(&acc.email))
-            .unwrap_or(false);
-        if svc.is_due(acc, is_active, now_unix) {
-            due_target = Some(acc.email.clone());
-            break;
-        }
+    if changed && !refresher::with(paths, store, vault, |r| r.busy()) {
+        state.refreshing = false;
     }
-    let Some(target) = due_target else {
-        return false;
-    };
-    let mut accounts = store.load().unwrap_or_else(|_| state.accounts.clone());
-    let Some(acc) = accounts.get_mut(&target) else {
-        return false;
-    };
-    let _ = svc.refresh_account(acc, vault, now_unix);
-    let _ = store.save(&mut accounts);
-    state.reload_from_disk(paths);
-    true
+    changed
 }
 
 fn do_migrate_vault(
@@ -497,7 +512,11 @@ fn do_migrate_vault(
             );
         }
         Err(err) => {
-            state.show_toast(format!("Vault migration failed - {err}"), ToastLevel::Error, now_ms);
+            state.show_toast(
+                format!("Vault migration failed - {err}"),
+                ToastLevel::Error,
+                now_ms,
+            );
         }
     }
 }
@@ -513,10 +532,18 @@ fn do_toggle_switch_mode(store: &Store, state: &mut DeckState, now_ms: u64) {
                 SwitchMode::Auto => "auto",
                 SwitchMode::Manual => "manual",
             };
-            state.show_toast(format!("Switch mode set to {lbl}"), ToastLevel::Success, now_ms);
+            state.show_toast(
+                format!("Switch mode set to {lbl}"),
+                ToastLevel::Success,
+                now_ms,
+            );
         }
         Err(err) => {
-            state.show_toast(format!("Failed to save mode - {err}"), ToastLevel::Error, now_ms);
+            state.show_toast(
+                format!("Failed to save mode - {err}"),
+                ToastLevel::Error,
+                now_ms,
+            );
         }
     }
 }
@@ -536,11 +563,9 @@ fn do_verify_or_toggle_mode(store: &Store, state: &mut DeckState, now_ms: u64) {
                         ToastLevel::Info,
                         now_ms,
                     ),
-                    Err(_) => state.show_toast(
-                        format!("Verify URL: {url}"),
-                        ToastLevel::Warn,
-                        now_ms,
-                    ),
+                    Err(_) => {
+                        state.show_toast(format!("Verify URL: {url}"), ToastLevel::Warn, now_ms)
+                    }
                 }
             } else {
                 state.show_toast(
@@ -562,7 +587,11 @@ fn do_ack_restart(paths: &Paths, state: &mut DeckState, now_ms: u64) {
             state.show_toast("Cleared agy restart banner", ToastLevel::Success, now_ms);
         }
         Err(err) => {
-            state.show_toast(format!("Ack restart failed - {err}"), ToastLevel::Error, now_ms);
+            state.show_toast(
+                format!("Ack restart failed - {err}"),
+                ToastLevel::Error,
+                now_ms,
+            );
         }
     }
 }
@@ -582,14 +611,22 @@ fn do_export_backup_meta(store: &Store, vault: &Vault, state: &mut DeckState, no
             );
         }
         Err(err) => {
-            state.show_toast(format!("Backup export failed - {err}"), ToastLevel::Error, now_ms);
+            state.show_toast(
+                format!("Backup export failed - {err}"),
+                ToastLevel::Error,
+                now_ms,
+            );
         }
     }
 }
 
 fn do_quick_create_profile(paths: &Paths, store: &Store, state: &mut DeckState, now_ms: u64) {
     let Some(email) = state.selected_email() else {
-        state.show_toast("Select an account on Dashboard first", ToastLevel::Warn, now_ms);
+        state.show_toast(
+            "Select an account on Dashboard first",
+            ToastLevel::Warn,
+            now_ms,
+        );
         return;
     };
     let mut settings = store.load_settings().unwrap_or_default();
@@ -635,7 +672,11 @@ fn do_quick_create_profile(paths: &Paths, store: &Store, state: &mut DeckState, 
             );
         }
         Err(err) => {
-            state.show_toast(format!("Profile save failed - {err}"), ToastLevel::Error, now_ms);
+            state.show_toast(
+                format!("Profile save failed - {err}"),
+                ToastLevel::Error,
+                now_ms,
+            );
         }
     }
 }
@@ -655,10 +696,18 @@ fn do_delete_selected_profile(paths: &Paths, store: &Store, state: &mut DeckStat
         Ok(()) => {
             state.subview_cursor = state.subview_cursor.saturating_sub(1);
             state.reload_from_disk(paths);
-            state.show_toast(format!("Removed profile '{name}'"), ToastLevel::Info, now_ms);
+            state.show_toast(
+                format!("Removed profile '{name}'"),
+                ToastLevel::Info,
+                now_ms,
+            );
         }
         Err(err) => {
-            state.show_toast(format!("Remove profile failed - {err}"), ToastLevel::Error, now_ms);
+            state.show_toast(
+                format!("Remove profile failed - {err}"),
+                ToastLevel::Error,
+                now_ms,
+            );
         }
     }
 }
@@ -672,7 +721,11 @@ fn do_clear_history(paths: &Paths, state: &mut DeckState, now_ms: u64) {
             state.show_toast("Cleared local history log", ToastLevel::Info, now_ms);
         }
         Err(err) => {
-            state.show_toast(format!("Clear history failed - {err}"), ToastLevel::Error, now_ms);
+            state.show_toast(
+                format!("Clear history failed - {err}"),
+                ToastLevel::Error,
+                now_ms,
+            );
         }
     }
 }
@@ -707,10 +760,13 @@ fn save_onboarded_bundle(
     } else {
         None
     };
-    let fallback_email = bundle
-        .email_hint
-        .clone()
-        .or_else(|| if is_import { session.current_email() } else { None });
+    let fallback_email = bundle.email_hint.clone().or_else(|| {
+        if is_import {
+            session.current_email()
+        } else {
+            None
+        }
+    });
     let (email, name) = match (resolved_identity, fallback_email) {
         (Some((em, nm)), _) => (em.to_ascii_lowercase(), nm),
         (None, Some(em)) => (em.to_ascii_lowercase(), "Google User".to_string()),
@@ -725,7 +781,11 @@ fn save_onboarded_bundle(
     };
     let vault_key = format!("account:{email}");
     if let Err(err) = vault.set(&vault_key, &bundle.raw_json) {
-        state.show_toast(format!("Vault write failed - {err}"), ToastLevel::Error, now_ms);
+        state.show_toast(
+            format!("Vault write failed - {err}"),
+            ToastLevel::Error,
+            now_ms,
+        );
         return;
     }
     let mut accounts = store.load().unwrap_or_else(|_| Accounts::new());
@@ -757,7 +817,11 @@ fn save_onboarded_bundle(
     }
     accounts.upsert(acc);
     if let Err(err) = store.save(&mut accounts) {
-        state.show_toast(format!("Store save failed - {err}"), ToastLevel::Error, now_ms);
+        state.show_toast(
+            format!("Store save failed - {err}"),
+            ToastLevel::Error,
+            now_ms,
+        );
         return;
     }
     record_history(store, history_kind, Some(email.clone()), history_detail);
@@ -786,11 +850,19 @@ fn do_interactive_login(
     let bundle = match suspended {
         Ok(Ok(b)) => b,
         Ok(Err(err)) => {
-            state.show_toast(format!("Login cancelled or failed - {err}"), ToastLevel::Warn, now_ms);
+            state.show_toast(
+                format!("Login cancelled or failed - {err}"),
+                ToastLevel::Warn,
+                now_ms,
+            );
             return;
         }
         Err(err) => {
-            state.show_toast(format!("Terminal suspend error - {err}"), ToastLevel::Error, now_ms);
+            state.show_toast(
+                format!("Terminal suspend error - {err}"),
+                ToastLevel::Error,
+                now_ms,
+            );
             return;
         }
     };
@@ -854,11 +926,12 @@ fn switch_view(
     state: &mut DeckState,
     target: ActiveView,
 ) {
-    if state.view == ActiveView::FailoverPolicy && target != ActiveView::FailoverPolicy {
-        if state.policy_draft.dirty {
-            state.policy_draft.dirty = false;
-            state.reload_from_disk(paths);
-        }
+    if state.view == ActiveView::FailoverPolicy
+        && target != ActiveView::FailoverPolicy
+        && state.policy_draft.dirty
+    {
+        state.policy_draft.dirty = false;
+        state.reload_from_disk(paths);
     }
     state.view = target;
     state.detail_scroll = 0;
@@ -908,13 +981,11 @@ fn run_palette_command(
             state.refreshing = true;
             let _ = term.draw(theme.env.ascii, |f| deck::render_deck(f, state, theme));
             do_refresh_all(paths, store, vault, state, quota_svc, true, now_ms);
-            state.refreshing = false;
         }
         PaletteCommand::RefreshSelected => {
             state.refreshing = true;
             let _ = term.draw(theme.env.ascii, |f| deck::render_deck(f, state, theme));
             do_refresh_selected(paths, store, vault, state, quota_svc, now_ms);
-            state.refreshing = false;
         }
         PaletteCommand::AddAccount => {
             state.modal_button_idx = 0;
@@ -1021,7 +1092,10 @@ fn run_keycap_action(
             }
         }
         KeycapAction::Palette => {
-            state.modal = Modal::CommandPalette { query: String::new(), selected: 0 };
+            state.modal = Modal::CommandPalette {
+                query: String::new(),
+                selected: 0,
+            };
         }
         KeycapAction::Help => {
             state.modal = Modal::ShortcutGuide;
@@ -1040,7 +1114,6 @@ fn run_keycap_action(
                 state.refreshing = true;
                 let _ = term.draw(theme.env.ascii, |f| deck::render_deck(f, state, theme));
                 do_refresh_all(paths, store, vault, state, quota_svc, true, now_ms);
-                state.refreshing = false;
             }
         }
         KeycapAction::Next => do_rotate_next(store, state, now_ms),
@@ -1114,10 +1187,7 @@ fn confirm_active_modal(
         Modal::AddAccountHint => {
             do_interactive_login(term, paths, store, vault, session, state, quota_svc, now_ms);
         }
-        Modal::None
-        | Modal::FilterInput
-        | Modal::CommandPalette { .. }
-        | Modal::ShortcutGuide => {}
+        Modal::None | Modal::FilterInput | Modal::CommandPalette { .. } | Modal::ShortcutGuide => {}
     }
 }
 
@@ -1129,7 +1199,11 @@ fn toggle_view(
     state: &mut DeckState,
     target: ActiveView,
 ) {
-    let dest = if state.view == target { ActiveView::Dashboard } else { target };
+    let dest = if state.view == target {
+        ActiveView::Dashboard
+    } else {
+        target
+    };
     switch_view(paths, store, vault, session, state, dest);
 }
 
@@ -1152,7 +1226,10 @@ fn handle_key_event(
         return true;
     }
     if mods.ctrl && matches!(key, Key::Char('k' | 'K')) {
-        state.modal = Modal::CommandPalette { query: String::new(), selected: 0 };
+        state.modal = Modal::CommandPalette {
+            query: String::new(),
+            selected: 0,
+        };
         return false;
     }
 
@@ -1188,7 +1265,11 @@ fn handle_key_event(
         return false;
     }
 
-    if let Modal::CommandPalette { ref query, selected } = state.modal {
+    if let Modal::CommandPalette {
+        ref query,
+        selected,
+    } = state.modal
+    {
         let mut q = query.clone();
         let mut sel = selected;
         let items = state.filtered_palette(&q);
@@ -1201,59 +1282,71 @@ fn handle_key_event(
                     let cur = sel.min(items.len() - 1);
                     sel = if cur == 0 { items.len() - 1 } else { cur - 1 };
                 }
-                state.modal = Modal::CommandPalette { query: q, selected: sel };
+                state.modal = Modal::CommandPalette {
+                    query: q,
+                    selected: sel,
+                };
             }
             Key::Down | Key::Tab => {
                 if !items.is_empty() {
                     let cur = sel.min(items.len() - 1);
                     sel = (cur + 1) % items.len();
                 }
-                state.modal = Modal::CommandPalette { query: q, selected: sel };
+                state.modal = Modal::CommandPalette {
+                    query: q,
+                    selected: sel,
+                };
             }
             Key::Char('p' | 'P') if mods.ctrl => {
                 if !items.is_empty() {
                     let cur = sel.min(items.len() - 1);
                     sel = if cur == 0 { items.len() - 1 } else { cur - 1 };
                 }
-                state.modal = Modal::CommandPalette { query: q, selected: sel };
+                state.modal = Modal::CommandPalette {
+                    query: q,
+                    selected: sel,
+                };
             }
             Key::Char('n' | 'N') if mods.ctrl => {
                 if !items.is_empty() {
                     let cur = sel.min(items.len() - 1);
                     sel = (cur + 1) % items.len();
                 }
-                state.modal = Modal::CommandPalette { query: q, selected: sel };
+                state.modal = Modal::CommandPalette {
+                    query: q,
+                    selected: sel,
+                };
             }
             Key::Backspace => {
                 q.pop();
-                state.modal = Modal::CommandPalette { query: q, selected: 0 };
+                state.modal = Modal::CommandPalette {
+                    query: q,
+                    selected: 0,
+                };
             }
             Key::Char('u' | 'U') if mods.ctrl => {
                 q.clear();
-                state.modal = Modal::CommandPalette { query: q, selected: 0 };
+                state.modal = Modal::CommandPalette {
+                    query: q,
+                    selected: 0,
+                };
             }
             Key::Enter => {
                 state.modal = Modal::None;
                 if !items.is_empty() {
                     let entry = items[sel.min(items.len() - 1)];
                     return run_palette_command(
-                        entry.cmd,
-                        term,
-                        theme,
-                        paths,
-                        store,
-                        vault,
-                        session,
-                        state,
-                        quota_svc,
-                        stacked,
-                        now_ms,
+                        entry.cmd, term, theme, paths, store, vault, session, state, quota_svc,
+                        stacked, now_ms,
                     );
                 }
             }
             Key::Char(ch) if !mods.ctrl && !mods.alt => {
                 q.push(ch);
-                state.modal = Modal::CommandPalette { query: q, selected: 0 };
+                state.modal = Modal::CommandPalette {
+                    query: q,
+                    selected: 0,
+                };
             }
             _ => {}
         }
@@ -1280,12 +1373,8 @@ fn handle_key_event(
                 let idx = state.modal_button_idx;
                 state.modal = Modal::None;
                 match idx {
-                    0 => do_launch_isolated_agy(
-                        term, paths, store, vault, state, &target, now_ms,
-                    ),
-                    1 => do_switch_account(
-                        paths, store, vault, session, state, &target, now_ms,
-                    ),
+                    0 => do_launch_isolated_agy(term, paths, store, vault, state, &target, now_ms),
+                    1 => do_switch_account(paths, store, vault, session, state, &target, now_ms),
                     _ => {}
                 }
             }
@@ -1323,7 +1412,10 @@ fn handle_key_event(
     }
 
     if state.modal == Modal::ShortcutGuide {
-        if matches!(key, Key::Esc | Key::Enter | Key::Char('?' | 'q' | 'Q' | ' ')) {
+        if matches!(
+            key,
+            Key::Esc | Key::Enter | Key::Char('?' | 'q' | 'Q' | ' ')
+        ) {
             state.modal = Modal::None;
         }
         return false;
@@ -1336,7 +1428,10 @@ fn handle_key_event(
             }
             Key::Char('q' | 'Q') => return true,
             Key::Char(':') => {
-                state.modal = Modal::CommandPalette { query: String::new(), selected: 0 };
+                state.modal = Modal::CommandPalette {
+                    query: String::new(),
+                    selected: 0,
+                };
             }
             Key::Char('?') => state.modal = Modal::ShortcutGuide,
             Key::Up | Key::Char('k') => {
@@ -1359,9 +1454,7 @@ fn handle_key_event(
                 Ok(()) => {
                     state.show_toast("Saved pool failover policy", ToastLevel::Success, now_ms)
                 }
-                Err(e) => {
-                    state.show_toast(format!("Save failed - {e}"), ToastLevel::Error, now_ms)
-                }
+                Err(e) => state.show_toast(format!("Save failed - {e}"), ToastLevel::Error, now_ms),
             },
             _ => {}
         }
@@ -1383,9 +1476,7 @@ fn handle_key_event(
     } else if state.view == ActiveView::Backup && matches!(key, Key::Char('x' | 'X')) {
         do_export_backup_meta(store, vault, state, now_ms);
         return false;
-    } else if state.view == ActiveView::Doctor
-        && matches!(key, Key::Char('r' | 'R') | Key::Enter)
-    {
+    } else if state.view == ActiveView::Doctor && matches!(key, Key::Char('r' | 'R') | Key::Enter) {
         state.doctor_checks = run_doctor(paths, store, vault, session);
         state.show_toast("Doctor diagnostics updated", ToastLevel::Info, now_ms);
         return false;
@@ -1466,13 +1557,11 @@ fn handle_key_event(
             state.refreshing = true;
             let _ = term.draw(theme.env.ascii, |f| deck::render_deck(f, state, theme));
             do_refresh_all(paths, store, vault, state, quota_svc, true, now_ms);
-            state.refreshing = false;
         }
         Key::Char('u' | 'U') => {
             state.refreshing = true;
             let _ = term.draw(theme.env.ascii, |f| deck::render_deck(f, state, theme));
             do_refresh_selected(paths, store, vault, state, quota_svc, now_ms);
-            state.refreshing = false;
         }
         Key::Char('/') => {
             state.filter_backup = state.filter.clone();
@@ -1480,7 +1569,10 @@ fn handle_key_event(
             state.modal = Modal::FilterInput;
         }
         Key::Char(':') => {
-            state.modal = Modal::CommandPalette { query: String::new(), selected: 0 };
+            state.modal = Modal::CommandPalette {
+                query: String::new(),
+                selected: 0,
+            };
         }
         Key::Char('g' | 'G') => {
             switch_view(paths, store, vault, session, state, ActiveView::Dashboard);
@@ -1515,7 +1607,14 @@ fn handle_key_event(
             toggle_view(paths, store, vault, session, state, ActiveView::QuotaPools);
         }
         Key::Char('f' | 'F') => {
-            toggle_view(paths, store, vault, session, state, ActiveView::FailoverPolicy);
+            toggle_view(
+                paths,
+                store,
+                vault,
+                session,
+                state,
+                ActiveView::FailoverPolicy,
+            );
         }
         Key::Char('a' | 'A') => {
             state.modal_button_idx = 0;
@@ -1580,7 +1679,11 @@ fn handle_mouse_event(
                 Some(DividerDrag::Vertical) => PointerShape::ColResize,
                 Some(DividerDrag::Horizontal) => PointerShape::RowResize,
                 None => hit
-                    .and_then(|(id, s)| HitTarget::decode(id).map(HitTarget::pointer_shape).or(Some(s)))
+                    .and_then(|(id, s)| {
+                        HitTarget::decode(id)
+                            .map(HitTarget::pointer_shape)
+                            .or(Some(s))
+                    })
                     .unwrap_or(PointerShape::Default),
             };
             let _ = term.set_pointer(shape);
@@ -1618,17 +1721,28 @@ fn handle_mouse_event(
         }
         MouseKind::ScrollUp | MouseKind::ScrollDown => {
             let up = mouse.kind == MouseKind::ScrollUp;
-            if let Modal::CommandPalette { ref query, selected } = state.modal {
+            if let Modal::CommandPalette {
+                ref query,
+                selected,
+            } = state.modal
+            {
                 let q = query.clone();
                 let items = state.filtered_palette(&q);
                 if !items.is_empty() {
                     let cur = selected.min(items.len() - 1);
                     let next = if up {
-                        if cur == 0 { items.len() - 1 } else { cur - 1 }
+                        if cur == 0 {
+                            items.len() - 1
+                        } else {
+                            cur - 1
+                        }
                     } else {
                         (cur + 1) % items.len()
                     };
-                    state.modal = Modal::CommandPalette { query: q, selected: next };
+                    state.modal = Modal::CommandPalette {
+                        query: q,
+                        selected: next,
+                    };
                 }
                 return (false, true);
             }
@@ -1668,9 +1782,7 @@ fn handle_mouse_event(
                     Some(HitTarget::ModalSecondary) => {
                         let current = core::mem::replace(&mut state.modal, Modal::None);
                         if let Modal::ConfirmSwitch { email } = current {
-                            do_switch_account(
-                                paths, store, vault, session, state, &email, now_ms,
-                            );
+                            do_switch_account(paths, store, vault, session, state, &email, now_ms);
                         }
                     }
                     Some(HitTarget::ModalCancel) => {
@@ -1760,7 +1872,9 @@ fn handle_mouse_event(
                         if state.selected == idx && state.armed_row_click == Some(idx) {
                             state.armed_row_click = None;
                             state.modal_button_idx = 0;
-                            state.modal = Modal::ConfirmSwitch { email: vis[idx].clone() };
+                            state.modal = Modal::ConfirmSwitch {
+                                email: vis[idx].clone(),
+                            };
                         } else {
                             state.selected = idx;
                             state.armed_row_click = Some(idx);
@@ -1821,7 +1935,12 @@ pub fn run_interactive(paths: Paths) -> i32 {
     };
 
     let boot = eko::time::Instant::now();
-    if term.draw(theme.env.ascii, |frame| deck::render_deck(frame, &state, &theme)).is_err() {
+    if term
+        .draw(theme.env.ascii, |frame| {
+            deck::render_deck(frame, &state, &theme)
+        })
+        .is_err()
+    {
         return 0;
     }
     let mut dirty = false;
@@ -1830,11 +1949,16 @@ pub fn run_interactive(paths: Paths) -> i32 {
         dirty = true;
     }
     if !is_offline() && needs_initial_quota_refresh(&state) {
-        state.refreshing = true;
-        let _ = term.draw(theme.env.ascii, |frame| deck::render_deck(frame, &state, &theme));
         let init_ms = boot.elapsed().as_millis() as u64;
-        do_refresh_all(&paths, &store, &vault, &mut state, &mut quota_svc, true, init_ms);
-        state.refreshing = false;
+        do_refresh_all(
+            &paths,
+            &store,
+            &vault,
+            &mut state,
+            &mut quota_svc,
+            true,
+            init_ms,
+        );
         dirty = true;
     }
     let mut last_log_poll_ms: u64 = 0;
@@ -1908,6 +2032,10 @@ pub fn run_interactive(paths: Paths) -> i32 {
             }
         }
 
+        if apply_refresh_outcomes(&paths, &store, &vault, &mut state, now_ms) {
+            dirty = true;
+        }
+
         if now_ms.saturating_sub(last_due_check_ms) >= 4_000 {
             last_due_check_ms = now_ms;
             if do_refresh_one_due(&paths, &store, &vault, &mut state, &mut quota_svc) {
@@ -1916,7 +2044,12 @@ pub fn run_interactive(paths: Paths) -> i32 {
         }
 
         if dirty {
-            if term.draw(theme.env.ascii, |frame| deck::render_deck(frame, &state, &theme)).is_err() {
+            if term
+                .draw(theme.env.ascii, |frame| {
+                    deck::render_deck(frame, &state, &theme)
+                })
+                .is_err()
+            {
                 break;
             }
             dirty = false;

@@ -1,15 +1,26 @@
 use clap::{Arg, ArgAction, Command};
 
 fn flag(id: &'static str, long: &'static str, help: &'static str) -> Arg {
-    Arg::new(id).long(long).action(ArgAction::SetTrue).help(help)
+    Arg::new(id)
+        .long(long)
+        .action(ArgAction::SetTrue)
+        .help(help)
 }
 
 fn opt(id: &'static str, long: &'static str, val: &'static str, help: &'static str) -> Arg {
-    Arg::new(id).long(long).value_name(val).num_args(1).help(help)
+    Arg::new(id)
+        .long(long)
+        .value_name(val)
+        .num_args(1)
+        .help(help)
 }
 
 fn pos(id: &'static str, val: &'static str, required: bool, help: &'static str) -> Arg {
-    Arg::new(id).value_name(val).required(required).num_args(1).help(help)
+    Arg::new(id)
+        .value_name(val)
+        .required(required)
+        .num_args(1)
+        .help(help)
 }
 
 pub fn build_cli() -> Command {
@@ -70,6 +81,26 @@ pub fn build_cli() -> Command {
                 .about("Refresh and display 5-hour and weekly quota pools")
                 .arg(pos("account", "ACCOUNT", false, "Optional account selector"))
                 .arg(flag("no_refresh", "no-refresh", "Display cached quota snapshot without live HTTP fetch")),
+        )
+        .subcommand(
+            Command::new("image")
+                .about("Generate one image with agy in print mode inside an isolated overlay HOME")
+                .arg(opt("prompt", "prompt", "TEXT", "Image generation prompt").required(true))
+                .arg(opt("out", "out", "PATH", "Destination image path").required(true))
+                .arg(opt("width", "width", "W", "Target width in pixels (default: 1024)"))
+                .arg(opt("height", "height", "H", "Target height in pixels (default: 1024)"))
+                .arg(
+                    Arg::new("ref")
+                        .long("ref")
+                        .value_name("IMG")
+                        .action(ArgAction::Append)
+                        .num_args(1)
+                        .help("Reference image path (repeatable)"),
+                )
+                .arg(opt("wait_seconds", "wait-seconds", "SECS", "Seconds to poll brain folder for output image (default: 300)"))
+                .arg(opt("print_timeout", "print-timeout", "DURATION", "Timeout passed to agy --print-timeout (default: 12m)"))
+                .arg(opt("model", "model", "MODEL", "agy model for the run, e.g. gemini-4-neon-low (default: agy's own)"))
+                .arg(opt("account", "account", "ACCOUNT", "Account override (or pass --use-account)")),
         )
         .subcommand(
             Command::new("limit")

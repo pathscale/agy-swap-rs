@@ -77,7 +77,9 @@ fn env_is_falsy(name: &str) -> bool {
 
 impl UiEnv {
     pub fn detect(force_ascii: bool) -> Self {
-        let no_color = eko::env::var("NO_COLOR").map(|v| !v.is_empty()).unwrap_or(false);
+        let no_color = eko::env::var("NO_COLOR")
+            .map(|v| !v.is_empty())
+            .unwrap_or(false);
         let term = eko::env::var("TERM").unwrap_or_default();
         let colorterm = eko::env::var("COLORTERM").unwrap_or_default();
         let color_mode = if no_color || eq_ignore_ascii(&term, "dumb") {
@@ -102,7 +104,13 @@ impl UiEnv {
         let mouse = !env_is_falsy("AGY_SWAP_MOUSE");
         let pointer_shapes =
             mouse && color_mode != ColorMode::Mono && !env_is_falsy("AGY_SWAP_POINTER_SHAPES");
-        Self { color_mode, ascii, reduced_motion, mouse, pointer_shapes }
+        Self {
+            color_mode,
+            ascii,
+            reduced_motion,
+            mouse,
+            pointer_shapes,
+        }
     }
 }
 
@@ -337,9 +345,17 @@ impl Theme {
             PoolTone::Extra => self.pool_extra,
         };
         if pct <= 10.0 {
-            Style { fg: self.badge_critical.fg, bg: base.bg, attrs: base.attrs }
+            Style {
+                fg: self.badge_critical.fg,
+                bg: base.bg,
+                attrs: base.attrs,
+            }
         } else if pct <= 30.0 {
-            Style { fg: self.badge_low.fg, bg: base.bg, attrs: base.attrs }
+            Style {
+                fg: self.badge_low.fg,
+                bg: base.bg,
+                attrs: base.attrs,
+            }
         } else {
             base
         }
@@ -348,15 +364,31 @@ impl Theme {
     pub const fn on_row(&self, style: Style, selected: bool, hovered: bool) -> Style {
         if selected {
             if matches!(self.env.color_mode, ColorMode::Mono | ColorMode::Ansi16) {
-                Style { fg: style.fg, bg: style.bg, attrs: style.attrs.union(Attrs::REVERSE) }
+                Style {
+                    fg: style.fg,
+                    bg: style.bg,
+                    attrs: style.attrs.union(Attrs::REVERSE),
+                }
             } else {
-                Style { fg: style.fg, bg: self.row_selected.bg, attrs: style.attrs }
+                Style {
+                    fg: style.fg,
+                    bg: self.row_selected.bg,
+                    attrs: style.attrs,
+                }
             }
         } else if hovered {
             if matches!(self.env.color_mode, ColorMode::Mono | ColorMode::Ansi16) {
-                Style { fg: style.fg, bg: style.bg, attrs: style.attrs.union(Attrs::UNDERLINE) }
+                Style {
+                    fg: style.fg,
+                    bg: style.bg,
+                    attrs: style.attrs.union(Attrs::UNDERLINE),
+                }
             } else {
-                Style { fg: style.fg, bg: self.row_hover.bg, attrs: style.attrs }
+                Style {
+                    fg: style.fg,
+                    bg: self.row_hover.bg,
+                    attrs: style.attrs,
+                }
             }
         } else {
             style

@@ -31,17 +31,13 @@ const MAX_TAIL_STEP_BYTES: usize = 256 * 1024;
 /// Persisted state machine state for live failover coordination.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum SwitchRuntimeState {
+    #[default]
     Idle,
     Switching,
     Ready,
     NoAccount,
-}
-
-impl Default for SwitchRuntimeState {
-    fn default() -> Self {
-        Self::Idle
-    }
 }
 
 impl SwitchRuntimeState {
@@ -149,8 +145,7 @@ fn read_runtime_unlocked(paths: &Paths) -> Result<SwitchRuntime> {
 }
 
 fn write_runtime_unlocked(paths: &Paths, runtime: &SwitchRuntime) -> Result<()> {
-    let mut encoded =
-        serde_json::to_vec_pretty(runtime).map_err(|e| Error::Json(e.to_string()))?;
+    let mut encoded = serde_json::to_vec_pretty(runtime).map_err(|e| Error::Json(e.to_string()))?;
     encoded.push(b'\n');
     atomic_write_private(&paths.runtime_file, &encoded)
 }
@@ -329,7 +324,11 @@ fn infer_family_from_line(line: &str) -> Option<ModelFamily> {
 
 fn extract_email_hint(line: &str) -> Option<String> {
     for token in line.split(|c: char| {
-        c.is_whitespace() || matches!(c, '"' | '\'' | '(' | ')' | '[' | ']' | '<' | '>' | ',' | ';')
+        c.is_whitespace()
+            || matches!(
+                c,
+                '"' | '\'' | '(' | ')' | '[' | ']' | '<' | '>' | ',' | ';'
+            )
     }) {
         let trimmed = token.trim_matches(':');
         if let Some(at) = trimmed.find('@') {
@@ -453,8 +452,7 @@ fn load_tail_cursors_unlocked(paths: &Paths) -> TailCursorStore {
 
 fn save_tail_cursors_unlocked(paths: &Paths, cursors: &TailCursorStore) -> Result<()> {
     let cpath = cursor_store_path(paths);
-    let mut encoded =
-        serde_json::to_vec_pretty(cursors).map_err(|e| Error::Json(e.to_string()))?;
+    let mut encoded = serde_json::to_vec_pretty(cursors).map_err(|e| Error::Json(e.to_string()))?;
     encoded.push(b'\n');
     atomic_write_private(&cpath, &encoded)
 }

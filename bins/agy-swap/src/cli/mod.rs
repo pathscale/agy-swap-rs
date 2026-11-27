@@ -1,9 +1,13 @@
 pub mod accounts;
 pub mod admin;
 pub mod args;
+pub mod image;
 pub mod routing;
 
-use agy_core::{Account, Accounts, Badge, HistoryEntry, ModelFamily, Paths, SessionManager, Settings, Store, Vault};
+use agy_core::{
+    Account, Accounts, Badge, HistoryEntry, ModelFamily, Paths, SessionManager, Settings, Store,
+    Vault,
+};
 use clap::error::ErrorKind;
 use serde_json::{json, Value};
 
@@ -15,7 +19,12 @@ fn migrate_legacy_gemini_config_dir(paths: &Paths) {
     if agy_core::store::ensure_private_dir(&paths.config_dir).is_err() {
         return;
     }
-    for file_name in ["accounts.json", "vault.json", "settings.json", "history-v1.jsonl"] {
+    for file_name in [
+        "accounts.json",
+        "vault.json",
+        "settings.json",
+        "history-v1.jsonl",
+    ] {
         let src = agy_core::paths::join_path(&legacy_dir, file_name);
         let dst = agy_core::paths::join_path(&paths.config_dir, file_name);
         let Ok(src_mtime) = std::fs::metadata(&src).and_then(|m| m.modified()) else {
@@ -76,7 +85,9 @@ pub struct CliPalette {
 
 impl CliPalette {
     pub fn detect(stdout_tty: bool) -> Self {
-        let no_color = eko::env::var("NO_COLOR").map(|v| !v.is_empty()).unwrap_or(false);
+        let no_color = eko::env::var("NO_COLOR")
+            .map(|v| !v.is_empty())
+            .unwrap_or(false);
         let dumb = eko::env::var("TERM").as_deref() == Some("dumb");
         if !stdout_tty || no_color || dumb {
             return Self {
@@ -91,8 +102,12 @@ impl CliPalette {
                 reset: "",
             };
         }
-        let ct = eko::env::var("COLORTERM").unwrap_or_default().to_ascii_lowercase();
-        let term = eko::env::var("TERM").unwrap_or_default().to_ascii_lowercase();
+        let ct = eko::env::var("COLORTERM")
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        let term = eko::env::var("TERM")
+            .unwrap_or_default()
+            .to_ascii_lowercase();
         let truecolor = ct == "truecolor"
             || ct == "24bit"
             || term.contains("ghostty")
@@ -162,7 +177,14 @@ impl CliPalette {
                 full += 1;
             }
             let rem = w.saturating_sub(full);
-            return format!("[{color}{}{}{}{}] {:5.1}%", "#".repeat(full), self.dark_gray, "-".repeat(rem), self.reset, clamped);
+            return format!(
+                "[{color}{}{}{}{}] {:5.1}%",
+                "#".repeat(full),
+                self.dark_gray,
+                "-".repeat(rem),
+                self.reset,
+                clamped
+            );
         }
         let blocks = ["", "▏", "▎", "▍", "▌", "▋", "▊", "▉"];
         let mut sub = ((total - (full as f64)) * 8.0).round() as usize;
@@ -256,7 +278,10 @@ impl AppContext {
             }
             return code;
         }
-        eprintln!("{}agy-swap-rs: {command}: {msg}{}", self.palette.red, self.palette.reset);
+        eprintln!(
+            "{}agy-swap-rs: {command}: {msg}{}",
+            self.palette.red, self.palette.reset
+        );
         code
     }
 
@@ -288,7 +313,10 @@ impl AppContext {
                 return Ok(legacy.clone());
             }
         }
-        Err(agy_core::Error::Auth(format!("no saved token for {}", account.email)))
+        Err(agy_core::Error::Auth(format!(
+            "no saved token for {}",
+            account.email
+        )))
     }
 
     pub fn has_token(&self, account: &Account) -> bool {
@@ -317,7 +345,12 @@ impl AppContext {
         None
     }
 
-    pub fn resolve_selector(&self, accounts: &Accounts, settings: &Settings, raw: &str) -> Option<String> {
+    pub fn resolve_selector(
+        &self,
+        accounts: &Accounts,
+        settings: &Settings,
+        raw: &str,
+    ) -> Option<String> {
         let mut target = raw.trim().to_string();
         if target.is_empty() {
             return None;
@@ -354,7 +387,10 @@ impl AppContext {
 }
 
 pub fn opt_str<'a>(m: &'a clap::ArgMatches, id: &str) -> Option<&'a str> {
-    m.try_get_one::<String>(id).ok().flatten().map(String::as_str)
+    m.try_get_one::<String>(id)
+        .ok()
+        .flatten()
+        .map(String::as_str)
 }
 
 pub fn explicit_account<'a>(m: &'a clap::ArgMatches, id: &str) -> Option<&'a str> {
@@ -362,7 +398,11 @@ pub fn explicit_account<'a>(m: &'a clap::ArgMatches, id: &str) -> Option<&'a str
 }
 
 pub fn opt_flag(m: &clap::ArgMatches, id: &str) -> bool {
-    m.try_get_one::<bool>(id).ok().flatten().copied().unwrap_or(false)
+    m.try_get_one::<bool>(id)
+        .ok()
+        .flatten()
+        .copied()
+        .unwrap_or(false)
 }
 
 pub fn format_duration_secs(secs: i64) -> String {
@@ -401,8 +441,12 @@ pub fn parse_duration_secs(raw: &str) -> Result<i64, String> {
     }
     let max_secs: i64 = 7 * 24 * 3600;
     if trimmed.bytes().all(|b| b.is_ascii_digit()) {
-        let mins: i64 = trimmed.parse().map_err(|_| "invalid duration".to_string())?;
-        let secs = mins.checked_mul(60).ok_or_else(|| "duration overflow".to_string())?;
+        let mins: i64 = trimmed
+            .parse()
+            .map_err(|_| "invalid duration".to_string())?;
+        let secs = mins
+            .checked_mul(60)
+            .ok_or_else(|| "duration overflow".to_string())?;
         if secs > max_secs {
             return Err("duration exceeds maximum of 7d".to_string());
         }
@@ -422,7 +466,9 @@ pub fn parse_duration_secs(raw: &str) -> Result<i64, String> {
         if num.is_empty() {
             return Err(format!("invalid duration {raw:?}"));
         }
-        let count: i64 = num.parse().map_err(|_| format!("invalid duration {raw:?}"))?;
+        let count: i64 = num
+            .parse()
+            .map_err(|_| format!("invalid duration {raw:?}"))?;
         num.clear();
         let (rank, mult) = match ch {
             'd' => (1u8, 86_400i64),
@@ -435,8 +481,12 @@ pub fn parse_duration_secs(raw: &str) -> Result<i64, String> {
             return Err(format!("out-of-order duration unit in {raw:?}"));
         }
         prev_rank = rank;
-        let add = count.checked_mul(mult).ok_or_else(|| "duration overflow".to_string())?;
-        total = total.checked_add(add).ok_or_else(|| "duration overflow".to_string())?;
+        let add = count
+            .checked_mul(mult)
+            .ok_or_else(|| "duration overflow".to_string())?;
+        total = total
+            .checked_add(add)
+            .ok_or_else(|| "duration overflow".to_string())?;
     }
     if !num.is_empty() || total > max_secs {
         return Err(format!("invalid or out-of-range duration {raw:?}"));
@@ -450,7 +500,9 @@ pub fn parse_family(raw: &str) -> Result<ModelFamily, String> {
         "claude" | "other" | "claude-gpt" | "third-party" => Ok(ModelFamily::Claude),
         "gpt" => Ok(ModelFamily::Gpt),
         "argon" => Ok(ModelFamily::Argon),
-        other => Err(format!("invalid model family {other:?} (expected gemini, claude, gpt, or argon)")),
+        other => Err(format!(
+            "invalid model family {other:?} (expected gemini, claude, gpt, or argon)"
+        )),
     }
 }
 
@@ -466,13 +518,51 @@ pub fn family_name(family: ModelFamily) -> &'static str {
 fn is_management_subcommand(s: &str) -> bool {
     matches!(
         s,
-        "add" | "login" | "import-current" | "list" | "limits" | "limit" | "switch" | "activate"
-            | "next" | "switch-next" | "rotate" | "remove" | "rm" | "status" | "current"
-            | "logout" | "verify" | "verify-accounts" | "account" | "alias" | "tag" | "profile"
-            | "bind" | "recommend" | "ensure-active" | "resolve-route" | "rotate-after-failure"
-            | "quota-policy" | "switch-mode" | "doctor" | "config" | "watch" | "ack-restart"
-            | "history" | "stats" | "forecast" | "backup" | "statusline" | "metrics"
-            | "install-agy" | "update" | "version" | "completion" | "__dump-frame"
+        "add"
+            | "login"
+            | "import-current"
+            | "list"
+            | "limits"
+            | "limit"
+            | "image"
+            | "switch"
+            | "activate"
+            | "next"
+            | "switch-next"
+            | "rotate"
+            | "remove"
+            | "rm"
+            | "status"
+            | "current"
+            | "logout"
+            | "verify"
+            | "verify-accounts"
+            | "account"
+            | "alias"
+            | "tag"
+            | "profile"
+            | "bind"
+            | "recommend"
+            | "ensure-active"
+            | "resolve-route"
+            | "rotate-after-failure"
+            | "quota-policy"
+            | "switch-mode"
+            | "doctor"
+            | "config"
+            | "watch"
+            | "ack-restart"
+            | "history"
+            | "stats"
+            | "forecast"
+            | "backup"
+            | "statusline"
+            | "metrics"
+            | "install-agy"
+            | "update"
+            | "version"
+            | "completion"
+            | "__dump-frame"
     )
 }
 
@@ -512,7 +602,8 @@ pub fn execute_isolated_for_selector(selector: &str, agy_args: &[String]) -> i32
         eprintln!("agy-swap-rs: use-account: account {selector:?} not found");
         return 1;
     };
-    match agy_core::isolate::run_isolated_agy(&ctx.paths, &ctx.store, &ctx.vault, &email, agy_args) {
+    match agy_core::isolate::run_isolated_agy(&ctx.paths, &ctx.store, &ctx.vault, &email, agy_args)
+    {
         Ok(code) => {
             ctx.record_history("isolated_run", Some(&email), "isolated agy session");
             code
@@ -527,9 +618,25 @@ pub fn execute_isolated_for_selector(selector: &str, agy_args: &[String]) -> i32
 fn is_known_top_level_flag(s: &str) -> bool {
     matches!(
         s,
-        "-h" | "--help" | "-V" | "--version" | "--json" | "--verbose" | "--refresh" | "--force"
-            | "--family" | "--add" | "--token" | "--list" | "--next" | "--auto-rotate"
-            | "--switch-to" | "--switch" | "--remove" | "--status" | "--logout" | "help"
+        "-h" | "--help"
+            | "-V"
+            | "--version"
+            | "--json"
+            | "--verbose"
+            | "--refresh"
+            | "--force"
+            | "--family"
+            | "--add"
+            | "--token"
+            | "--list"
+            | "--next"
+            | "--auto-rotate"
+            | "--switch-to"
+            | "--switch"
+            | "--remove"
+            | "--status"
+            | "--logout"
+            | "help"
     ) || s.starts_with("--family=")
         || s.starts_with("--token=")
         || s.starts_with("--switch-to=")
@@ -676,7 +783,10 @@ pub fn run(argv: &[String]) -> i32 {
         Ok(p) => p,
         Err(err) => {
             if json_flag {
-                println!("{}", json!({"schema_version": 1, "command": "init", "ok": false, "error": err.to_string()}));
+                println!(
+                    "{}",
+                    json!({"schema_version": 1, "command": "init", "ok": false, "error": err.to_string()})
+                );
             } else {
                 eprintln!("agy-swap-rs: {err}");
             }
@@ -691,7 +801,19 @@ pub fn run(argv: &[String]) -> i32 {
 
     let skip_reconcile = matches!(
         matches.subcommand_name(),
-        Some("alias" | "tag" | "profile" | "bind" | "config" | "history" | "stats" | "backup" | "import-current" | "login" | "add")
+        Some(
+            "alias"
+                | "tag"
+                | "profile"
+                | "bind"
+                | "config"
+                | "history"
+                | "stats"
+                | "backup"
+                | "import-current"
+                | "login"
+                | "add"
+        )
     );
     if !skip_reconcile {
         harvest_all_overlays(&ctx.paths, &ctx.store, &ctx.vault);
@@ -706,6 +828,7 @@ pub fn run(argv: &[String]) -> i32 {
             "list" => accounts::cmd_list(&ctx, sub_m),
             "limits" => accounts::cmd_limits(&ctx, sub_m),
             "limit" => accounts::cmd_limit(&ctx, sub_m),
+            "image" => image::cmd_image(&ctx, sub_m),
             "switch" => accounts::cmd_switch(&ctx, sub_m),
             "next" => accounts::cmd_next(&ctx, sub_m),
             "remove" => accounts::cmd_remove(&ctx, sub_m),

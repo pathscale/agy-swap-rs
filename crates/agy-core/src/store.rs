@@ -16,9 +16,9 @@ use eko::file::File;
 use eko::path::Path;
 use serde_json::{Map, Value};
 
-use crate::model::{Accounts, HistoryEntry, Settings, normalize_email};
+use crate::model::{normalize_email, Accounts, HistoryEntry, Settings};
 use crate::paths::{
-    Paths, format_rfc3339_utc, join_path, parse_rfc3339_unix, sha256_hex, wall_unix_ns,
+    format_rfc3339_utc, join_path, parse_rfc3339_unix, sha256_hex, wall_unix_ns, Paths,
 };
 use crate::{Error, Result};
 
@@ -83,7 +83,9 @@ impl FileLock {
     fn open_lock_file(lock_path: &str) -> Result<File> {
         let trimmed = lock_path.trim();
         if trimmed.is_empty() {
-            return Err(Error::InvalidInput("lock path must not be empty".to_string()));
+            return Err(Error::InvalidInput(
+                "lock path must not be empty".to_string(),
+            ));
         }
         if let Some(parent) = Path::new(trimmed).parent().and_then(|p| p.to_str()) {
             if !parent.is_empty() {
@@ -131,9 +133,7 @@ impl FileLock {
             match eko::file::flock_exclusive(file.as_raw_fd(), true) {
                 Ok(()) => return Ok(Some(Self { file })),
                 Err(err) if err.interrupted() => continue,
-                Err(err)
-                    if err.0 == eko::libc::EAGAIN || err.0 == eko::libc::EWOULDBLOCK =>
-                {
+                Err(err) if err.0 == eko::libc::EAGAIN || err.0 == eko::libc::EWOULDBLOCK => {
                     return Ok(None);
                 }
                 Err(err) => {
@@ -154,7 +154,9 @@ impl Drop for FileLock {
 pub fn atomic_write_mode(path: &str, bytes: &[u8], mode: u32) -> Result<()> {
     let trimmed = path.trim();
     if trimmed.is_empty() {
-        return Err(Error::InvalidInput("target path must not be empty".to_string()));
+        return Err(Error::InvalidInput(
+            "target path must not be empty".to_string(),
+        ));
     }
     if let Ok(meta) = eko::file::symlink_metadata(trimmed) {
         if meta.is_dir() {
@@ -210,7 +212,10 @@ pub fn atomic_write_mode(path: &str, bytes: &[u8], mode: u32) -> Result<()> {
     }
 
     let Some((tmp_path, mut tmp_file)) = created else {
-        return Err(Error::Io(eko::file::Error::from_errno(last_errno, "open temp")));
+        return Err(Error::Io(eko::file::Error::from_errno(
+            last_errno,
+            "open temp",
+        )));
     };
 
     let write_res = (|| -> Result<()> {
@@ -319,8 +324,8 @@ impl Store {
             }
             Err(err) => return Err(Error::Io(err)),
         };
-        let mtime_ns = stat_mtime_ns(&self.paths.accounts_file)
-            .unwrap_or_else(|_| wall_unix_ns().max(1));
+        let mtime_ns =
+            stat_mtime_ns(&self.paths.accounts_file).unwrap_or_else(|_| wall_unix_ns().max(1));
         if raw.is_empty() {
             let mut empty = Accounts::new();
             empty.revision_ns = mtime_ns;
@@ -365,8 +370,8 @@ impl Store {
         }
         let encoded = accounts.encode_ordered_json()?;
         atomic_write_private(&self.paths.accounts_file, &encoded)?;
-        accounts.revision_ns = stat_mtime_ns(&self.paths.accounts_file)
-            .unwrap_or_else(|_| wall_unix_ns().max(1));
+        accounts.revision_ns =
+            stat_mtime_ns(&self.paths.accounts_file).unwrap_or_else(|_| wall_unix_ns().max(1));
         accounts.revision_hash = sha256_hex(&encoded);
         Ok(())
     }
@@ -413,7 +418,10 @@ impl Store {
             "at".to_string(),
             Value::String(format_rfc3339_utc(entry.timestamp_unix)),
         );
-        map.insert("timestamp_unix".to_string(), Value::from(entry.timestamp_unix));
+        map.insert(
+            "timestamp_unix".to_string(),
+            Value::from(entry.timestamp_unix),
+        );
         map.insert("kind".to_string(), Value::String(entry.kind.clone()));
         if let Some(ref em) = entry.email {
             if !em.is_empty() {

@@ -3,7 +3,7 @@ members = ["crates/agy-tui", "crates/agy-core", "bins/agy-swap"]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.85"
 license = "MIT OR Apache-2.0"
@@ -19,5 +19,5 @@ webpki-roots = { version = "^1", default-features = false }
 serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 clap = { version = "4", default-features = false, features = ["std", "help", "usage", "error-context"] }
-agy-tui = { version = "0.1.0", path = "crates/agy-tui" }
-agy-core = { version = "0.1.0", path = "crates/agy-core" }
+agy-tui = { version = "0.2.0", path = "crates/agy-tui" }
+agy-core = { version = "0.2.0", path = "crates/agy-core" }

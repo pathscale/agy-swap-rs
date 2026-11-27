@@ -137,7 +137,10 @@ pub fn wall_unix_secs() -> i64 {
 }
 
 pub fn wall_unix_ns() -> i64 {
-    let mut ts = eko::libc::timespec { tv_sec: 0, tv_nsec: 0 };
+    let mut ts = eko::libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
     unsafe {
         eko::libc::clock_gettime(eko::libc::CLOCK_REALTIME, &mut ts);
     }
@@ -155,7 +158,12 @@ pub struct SemVer {
 
 impl SemVer {
     pub const fn new(major: u64, minor: u64, patch: u64) -> Self {
-        Self { major, minor, patch, pre: None }
+        Self {
+            major,
+            minor,
+            patch,
+            pre: None,
+        }
     }
 
     pub fn parse(raw: &str) -> Result<Self> {
@@ -171,7 +179,9 @@ impl SemVer {
         let (core_part, pre) = match without_build.split_once('-') {
             Some((head, tail)) => {
                 if tail.is_empty() {
-                    return Err(Error::InvalidInput(format!("empty prerelease in version {raw}")));
+                    return Err(Error::InvalidInput(format!(
+                        "empty prerelease in version {raw}"
+                    )));
                 }
                 (head, Some(tail.to_string()))
             }
@@ -188,11 +198,15 @@ impl SemVer {
             .next()
             .ok_or_else(|| Error::InvalidInput(format!("invalid version {raw}")))?;
         if parts.next().is_some() {
-            return Err(Error::InvalidInput(format!("too many components in version {raw}")));
+            return Err(Error::InvalidInput(format!(
+                "too many components in version {raw}"
+            )));
         }
         let parse_num = |s: &str| -> Result<u64> {
             if s.is_empty() || !s.bytes().all(|b| b.is_ascii_digit()) {
-                return Err(Error::InvalidInput(format!("invalid numeric component in {raw}")));
+                return Err(Error::InvalidInput(format!(
+                    "invalid numeric component in {raw}"
+                )));
             }
             s.parse::<u64>()
                 .map_err(|_| Error::InvalidInput(format!("version component overflow in {raw}")))
@@ -345,8 +359,8 @@ fn sha256_compress(state: &mut [u32; 8], block: &[u8; 64]) {
 
 pub fn sha256_bytes(data: &[u8]) -> [u8; 32] {
     let mut state: [u32; 8] = [
-        0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
-        0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+        0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
+        0x5be0cd19,
     ];
     let full_chunks = data.len() / 64;
     let mut idx = 0usize;
@@ -514,12 +528,7 @@ pub fn parse_rfc3339_unix(raw: &str) -> Option<i64> {
     let hour = parse_u32(&s[11..13])?;
     let min = parse_u32(&s[14..16])?;
     let sec = parse_u32(&s[17..19])?;
-    if !(1..=12).contains(&month)
-        || !(1..=31).contains(&day)
-        || hour > 23
-        || min > 59
-        || sec > 60
-    {
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) || hour > 23 || min > 59 || sec > 60 {
         return None;
     }
     let mut pos = 19usize;

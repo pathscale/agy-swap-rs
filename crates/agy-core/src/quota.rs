@@ -18,8 +18,7 @@ use crate::vault::Vault;
 use crate::{Error, Result};
 
 /// Default Cloud Code Assist v1internal RPC prefix.
-pub const DEFAULT_CLOUD_CODE_API: &str =
-    "https://daily-cloudcode-pa.googleapis.com/v1internal:";
+pub const DEFAULT_CLOUD_CODE_API: &str = "https://daily-cloudcode-pa.googleapis.com/v1internal:";
 /// Project and plan tier cache TTL in seconds (15 minutes).
 pub const PROJECT_MEMO_TTL_SECS: i64 = 15 * 60;
 /// Polling cadence in seconds for the active account.
@@ -102,7 +101,10 @@ impl QuotaService {
     #[must_use]
     pub fn backoff_until_unix(&self, email: &str) -> Option<i64> {
         let key = email.trim().to_ascii_lowercase();
-        self.backoffs.get(&key).map(|b| b.until_unix).filter(|&u| u > 0)
+        self.backoffs
+            .get(&key)
+            .map(|b| b.until_unix)
+            .filter(|&u| u > 0)
     }
 
     /// Report whether `account` is due for a quota refresh at `now_unix`.
@@ -187,7 +189,8 @@ impl QuotaService {
             }
         };
 
-        let (mut bundle, mut refreshed) = match ensure_valid_token(&self.http, &raw_token, now_unix) {
+        let (mut bundle, mut refreshed) = match ensure_valid_token(&self.http, &raw_token, now_unix)
+        {
             Ok(pair) => pair,
             Err(err) => {
                 if matches!(err, Error::Auth(_)) {
@@ -202,7 +205,8 @@ impl QuotaService {
             }
         };
 
-        if !account.email.trim().is_empty() && !token_matches_email(&bundle.raw_json, &account.email)
+        if !account.email.trim().is_empty()
+            && !token_matches_email(&bundle.raw_json, &account.email)
         {
             account.verify_url = None;
             let msg = "refreshed token identity does not match account email".to_string();
@@ -224,8 +228,10 @@ impl QuotaService {
                     "loadCodeAssist",
                     &json!({ "metadata": { "ideType": "ANTIGRAVITY" } }),
                 );
-                if matches!(load_res, Err(CloudCallError::HttpStatus { status: 401, .. }))
-                    && !refreshed
+                if matches!(
+                    load_res,
+                    Err(CloudCallError::HttpStatus { status: 401, .. })
+                ) && !refreshed
                     && bundle.refresh_token.is_some()
                 {
                     if let Ok(next_bundle) = refresh_access_token(&self.http, &bundle.raw_json) {
@@ -244,7 +250,9 @@ impl QuotaService {
                 let info = match load_res {
                     Ok(v) => v,
                     Err(cerr) => {
-                        return Err(self.handle_cloud_error(account, &email_key, now_unix, false, cerr));
+                        return Err(
+                            self.handle_cloud_error(account, &email_key, now_unix, false, cerr)
+                        );
                     }
                 };
                 if let Some((url, msg)) = eligibility_from_load(&info) {
@@ -265,13 +273,9 @@ impl QuotaService {
                             onboarded_tier = t;
                         }
                         Err(cerr) => {
-                            return Err(self.handle_cloud_error(
-                                account,
-                                &email_key,
-                                now_unix,
-                                false,
-                                cerr,
-                            ));
+                            return Err(
+                                self.handle_cloud_error(account, &email_key, now_unix, false, cerr)
+                            );
                         }
                     }
                 }
@@ -289,8 +293,10 @@ impl QuotaService {
         let proj_body = json!({ "project": project_id });
         let mut summary_res =
             self.cloud_post(&bundle.access_token, "retrieveUserQuotaSummary", &proj_body);
-        if matches!(summary_res, Err(CloudCallError::HttpStatus { status: 401, .. }))
-            && !refreshed
+        if matches!(
+            summary_res,
+            Err(CloudCallError::HttpStatus { status: 401, .. })
+        ) && !refreshed
             && bundle.refresh_token.is_some()
         {
             if let Ok(next_bundle) = refresh_access_token(&self.http, &bundle.raw_json) {
@@ -307,7 +313,9 @@ impl QuotaService {
         }
         let summary_opt = match summary_res {
             Ok(val) => Some(val),
-            Err(CloudCallError::HttpStatus { status: 404 | 501, .. }) => None,
+            Err(CloudCallError::HttpStatus {
+                status: 404 | 501, ..
+            }) => None,
             Err(cerr) => {
                 self.projects.remove(&email_key);
                 return Err(self.handle_cloud_error(account, &email_key, now_unix, true, cerr));
@@ -335,7 +343,8 @@ impl QuotaService {
         if need_flat {
             match self.cloud_post(&bundle.access_token, "retrieveUserQuota", &proj_body) {
                 Ok(flat_val) => {
-                    parsed_any |= merge_quota_payload(&mut snapshot, &flat_val, now_unix, skew_secs);
+                    parsed_any |=
+                        merge_quota_payload(&mut snapshot, &flat_val, now_unix, skew_secs);
                 }
                 Err(cerr) if summary_opt.is_none() => {
                     self.projects.remove(&email_key);
@@ -349,7 +358,8 @@ impl QuotaService {
             if let Ok(models_val) =
                 self.cloud_post(&bundle.access_token, "fetchAvailableModels", &proj_body)
             {
-                parsed_any |= merge_available_models(&mut snapshot, &models_val, now_unix, skew_secs);
+                parsed_any |=
+                    merge_available_models(&mut snapshot, &models_val, now_unix, skew_secs);
             }
         }
 
@@ -645,13 +655,21 @@ fn cloud_operation_url(base: &str, name: &str) -> Result<String> {
         || trimmed.contains(['?', '#', '\\'])
         || !trimmed.starts_with("operations/")
     {
-        return Err(Error::InvalidInput("invalid Cloud Code operation name".to_string()));
+        return Err(Error::InvalidInput(
+            "invalid Cloud Code operation name".to_string(),
+        ));
     }
     let stripped = base.trim().trim_end_matches(':');
     if let Some(idx) = stripped.rfind("/v1internal") {
-        Ok(format!("{}/{trimmed}", &stripped[..idx + "/v1internal".len()]))
+        Ok(format!(
+            "{}/{trimmed}",
+            &stripped[..idx + "/v1internal".len()]
+        ))
     } else {
-        Ok(format!("{}/v1internal/{trimmed}", stripped.trim_end_matches('/')))
+        Ok(format!(
+            "{}/v1internal/{trimmed}",
+            stripped.trim_end_matches('/')
+        ))
     }
 }
 
@@ -749,10 +767,14 @@ fn eligibility_from_error_body(status: u16, body: &[u8]) -> Option<(String, Stri
         let reason = detail.get("reason").and_then(Value::as_str).unwrap_or("");
         let meta = detail.get("metadata").and_then(Value::as_object);
         let raw_link = first_non_empty(&[
-            meta.and_then(|m| m.get("validation_url")).and_then(Value::as_str),
-            meta.and_then(|m| m.get("appeal_url")).and_then(Value::as_str),
-            meta.and_then(|m| m.get("validationUrl")).and_then(Value::as_str),
-            meta.and_then(|m| m.get("appealUrl")).and_then(Value::as_str),
+            meta.and_then(|m| m.get("validation_url"))
+                .and_then(Value::as_str),
+            meta.and_then(|m| m.get("appeal_url"))
+                .and_then(Value::as_str),
+            meta.and_then(|m| m.get("validationUrl"))
+                .and_then(Value::as_str),
+            meta.and_then(|m| m.get("appealUrl"))
+                .and_then(Value::as_str),
         ]);
         let message = meta
             .and_then(|m| m.get("uiMessage"))
@@ -893,10 +915,7 @@ fn extract_plan_tier(info: &Value) -> Option<String> {
                 .and_then(Value::as_str)
                 .map(clean_text)
                 .unwrap_or_default();
-            let tname = tier_obj
-                .get("name")
-                .and_then(Value::as_str)
-                .unwrap_or("");
+            let tname = tier_obj.get("name").and_then(Value::as_str).unwrap_or("");
             if !tid.is_empty() || !tname.trim().is_empty() {
                 let label = tier_display_name(&tid, tname);
                 if !label.is_empty() {
@@ -1188,8 +1207,8 @@ pub fn merge_quota_payload(
                     continue;
                 };
                 let reset_at = parse_shifted_reset(bucket, skew_secs);
-                let Some(target) = classify_pool_target(bid, group_name, raw_win)
-                    .or_else(|| group_pool.clone())
+                let Some(target) =
+                    classify_pool_target(bid, group_name, raw_win).or_else(|| group_pool.clone())
                 else {
                     continue;
                 };

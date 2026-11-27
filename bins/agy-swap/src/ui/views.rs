@@ -21,7 +21,11 @@ pub fn render_subview(frame: &mut Frame<'_>, area: Rect, state: &DeckState, them
     if area.is_empty() {
         return;
     }
-    frame.hit(HitTarget::DetailScrollArea.encode(), area, PointerShape::Default);
+    frame.hit(
+        HitTarget::DetailScrollArea.encode(),
+        area,
+        PointerShape::Default,
+    );
     let pad_x: u16 = if area.w >= 48 { 2 } else { 1 };
     let x = area.x.saturating_add(pad_x);
     let w = area.w.saturating_sub(pad_x * 2);
@@ -29,16 +33,22 @@ pub fn render_subview(frame: &mut Frame<'_>, area: Rect, state: &DeckState, them
         return;
     }
     let mut y = area.y;
-    frame.surface.put_str(x, y, w, state.view.title(), theme.text_bold);
+    frame
+        .surface
+        .put_str(x, y, w, state.view.title(), theme.text_bold);
     let back_hint = "[Esc / g] Dashboard";
     let bw = display_width(back_hint) as u16;
     if w > bw + 20 {
-        frame.surface.put_str(x + w - bw, y, bw, back_hint, theme.muted);
+        frame
+            .surface
+            .put_str(x + w - bw, y, bw, back_hint, theme.muted);
     }
     y = y.saturating_add(1);
     if y < area.bottom() {
         let hch = if frame.ascii { '-' } else { '\u{2500}' };
-        frame.surface.fill(Rect::new(x, y, w, 1), hch, theme.divider);
+        frame
+            .surface
+            .fill(Rect::new(x, y, w, 1), hch, theme.divider);
         y = y.saturating_add(1);
     }
     if y >= area.bottom() {
@@ -57,12 +67,7 @@ pub fn render_subview(frame: &mut Frame<'_>, area: Rect, state: &DeckState, them
     }
 }
 
-fn put_scrolled_lines(
-    frame: &mut Frame<'_>,
-    area: Rect,
-    lines: &[(String, Style)],
-    scroll: usize,
-) {
+fn put_scrolled_lines(frame: &mut Frame<'_>, area: Rect, lines: &[(String, Style)], scroll: usize) {
     if area.is_empty() || lines.is_empty() {
         return;
     }
@@ -98,10 +103,7 @@ fn render_profiles_view(frame: &mut Frame<'_>, area: Rect, state: &DeckState, th
         for (idx, name) in names.iter().enumerate() {
             if let Some(prof) = profiles.get(name) {
                 let mark = if idx == cur { ">" } else { " " };
-                let fam = prof
-                    .family
-                    .map(|f| f.as_str())
-                    .unwrap_or("any-family");
+                let fam = prof.family.map(|f| f.as_str()).unwrap_or("any-family");
                 let reserves = if prof.reserves.is_empty() {
                     "none".to_string()
                 } else {
@@ -111,7 +113,11 @@ fn render_profiles_view(frame: &mut Frame<'_>, area: Rect, state: &DeckState, th
                     "{mark} {name:<16} primary={}  family={fam}  policy={}  min={}%  reserves=[{reserves}]",
                     prof.primary, prof.policy, prof.threshold_pct
                 );
-                let st = if idx == cur { theme.row_selected } else { theme.text };
+                let st = if idx == cur {
+                    theme.row_selected
+                } else {
+                    theme.text
+                };
                 lines.push((row, st));
             }
         }
@@ -151,7 +157,10 @@ fn render_profiles_view(frame: &mut Frame<'_>, area: Rect, state: &DeckState, th
 fn render_history_view(frame: &mut Frame<'_>, area: Rect, state: &DeckState, theme: &Theme) {
     let mut lines: Vec<(String, Style)> = Vec::new();
     if state.history_json.is_empty() {
-        lines.push(("No local audit history recorded yet.".to_string(), theme.muted));
+        lines.push((
+            "No local audit history recorded yet.".to_string(),
+            theme.muted,
+        ));
         lines.push((
             "Switches, automatic failovers, and quota refreshes are logged locally.".to_string(),
             theme.text,
@@ -169,21 +178,19 @@ fn render_history_view(frame: &mut Frame<'_>, area: Rect, state: &DeckState, the
                 .get("timestamp_unix")
                 .and_then(|v| v.as_i64())
                 .map(format_rfc3339_utc)
-                .or_else(|| item.get("at").and_then(|v| v.as_str()).map(ToString::to_string))
+                .or_else(|| {
+                    item.get("at")
+                        .and_then(|v| v.as_str())
+                        .map(ToString::to_string)
+                })
                 .unwrap_or_else(|| "-".to_string());
-            let kind = item
-                .get("kind")
-                .and_then(|v| v.as_str())
-                .unwrap_or("event");
+            let kind = item.get("kind").and_then(|v| v.as_str()).unwrap_or("event");
             let email = item
                 .get("email")
                 .and_then(|v| v.as_str())
                 .filter(|s| !s.is_empty())
                 .unwrap_or("system");
-            let detail = item
-                .get("detail")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let detail = item.get("detail").and_then(|v| v.as_str()).unwrap_or("");
             let row = if detail.is_empty() {
                 format!("  {ts_str}  {kind:<14}  {email}")
             } else {
@@ -233,7 +240,10 @@ fn render_settings_view(frame: &mut Frame<'_>, area: Rect, state: &DeckState, th
     let pol = &state.policy_draft.policy;
     let mut lines: Vec<(String, Style)> = vec![
         ("Routing & Failover".to_string(), theme.text_bold),
-        (format!("  Switch mode:        {mode_str}  [press w to toggle]"), theme.text),
+        (
+            format!("  Switch mode:        {mode_str}  [press w to toggle]"),
+            theme.text,
+        ),
         (format!("  Ranking policy:     {def_pol}"), theme.text),
         (format!("  Route strategy:     {route_strat}"), theme.text),
         (format!("  Min remaining:      {min_pct}%"), theme.text),
@@ -260,24 +270,39 @@ fn render_settings_view(frame: &mut Frame<'_>, area: Rect, state: &DeckState, th
             ),
             theme.text,
         ),
-        (format!("  History retention:  {hist_days} days"), theme.text),
+        (
+            format!("  History retention:  {hist_days} days"),
+            theme.text,
+        ),
         (String::new(), theme.body),
         (format!("Aliases ({})", aliases.len()), theme.text_bold),
     ];
     if aliases.is_empty() {
-        lines.push(("  (none - set via 'agy-swap-rs alias set <name> <email>')".to_string(), theme.muted));
+        lines.push((
+            "  (none - set via 'agy-swap-rs alias set <name> <email>')".to_string(),
+            theme.muted,
+        ));
     } else {
         for (k, v) in &aliases {
             lines.push((format!("  {k:<16} -> {v}"), theme.text));
         }
     }
     lines.push((String::new(), theme.body));
-    lines.push((format!("Directory Bindings ({})", bindings.len()), theme.text_bold));
+    lines.push((
+        format!("Directory Bindings ({})", bindings.len()),
+        theme.text_bold,
+    ));
     if bindings.is_empty() {
-        lines.push(("  (none - set via 'agy-swap-rs bind set <dir> <profile>')".to_string(), theme.muted));
+        lines.push((
+            "  (none - set via 'agy-swap-rs bind set <dir> <profile>')".to_string(),
+            theme.muted,
+        ));
     } else {
         for b in &bindings {
-            lines.push((format!("  {} -> {} ({})", b.path, b.profile, b.mode), theme.text));
+            lines.push((
+                format!("  {} -> {} ({})", b.path, b.profile, b.mode),
+                theme.text,
+            ));
         }
     }
     put_scrolled_lines(frame, area, &lines, state.detail_scroll);
@@ -286,7 +311,10 @@ fn render_settings_view(frame: &mut Frame<'_>, area: Rect, state: &DeckState, th
 fn render_doctor_view(frame: &mut Frame<'_>, area: Rect, state: &DeckState, theme: &Theme) {
     let mut lines: Vec<(String, Style)> = Vec::new();
     if state.doctor_checks.is_empty() {
-        lines.push(("Press [r] or [Enter] to run installation diagnostics.".to_string(), theme.muted));
+        lines.push((
+            "Press [r] or [Enter] to run installation diagnostics.".to_string(),
+            theme.muted,
+        ));
     } else {
         let mut all_ok = true;
         for chk in &state.doctor_checks {
@@ -294,13 +322,21 @@ fn render_doctor_view(frame: &mut Frame<'_>, area: Rect, state: &DeckState, them
                 all_ok = false;
             }
             let icon = if chk.ok {
-                if frame.ascii { "[OK]  " } else { "\u{2713} " }
+                if frame.ascii {
+                    "[OK]  "
+                } else {
+                    "\u{2713} "
+                }
             } else if frame.ascii {
                 "[FAIL]"
             } else {
                 "\u{2715} "
             };
-            let st = if chk.ok { theme.badge_ready } else { theme.badge_critical };
+            let st = if chk.ok {
+                theme.badge_ready
+            } else {
+                theme.badge_critical
+            };
             lines.push((format!("{icon} {:<22} {}", chk.name, chk.detail), st));
         }
         lines.push((String::new(), theme.body));
@@ -321,7 +357,10 @@ fn render_doctor_view(frame: &mut Frame<'_>, area: Rect, state: &DeckState, them
 
 fn render_backup_view(frame: &mut Frame<'_>, area: Rect, state: &DeckState, theme: &Theme) {
     let lines: Vec<(String, Style)> = vec![
-        ("Portable Backup & Crash-Safe Restore".to_string(), theme.text_bold),
+        (
+            "Portable Backup & Crash-Safe Restore".to_string(),
+            theme.text_bold,
+        ),
         (
             format!("  Default target path: {}", state.backup_path),
             theme.text,
@@ -337,7 +376,11 @@ fn render_backup_view(frame: &mut Frame<'_>, area: Rect, state: &DeckState, them
             theme.text,
         ),
         (String::new(), theme.body),
-        ("Encrypted Vault Bundle Commands (AES-256-GCM + PBKDF2-HMAC-SHA256, 600k iters):".to_string(), theme.text_bold),
+        (
+            "Encrypted Vault Bundle Commands (AES-256-GCM + PBKDF2-HMAC-SHA256, 600k iters):"
+                .to_string(),
+            theme.text_bold,
+        ),
         (
             "  agy-swap-rs backup export backup.json --include-secrets --passphrase <8+ chars>"
                 .to_string(),
@@ -426,10 +469,20 @@ fn render_quota_pools_view(frame: &mut Frame<'_>, area: Rect, state: &DeckState,
             let rem = area.bottom().saturating_sub(y);
             if rem >= 5 && area.w >= 26 {
                 let h = 5.min(rem);
-                draw_pool_card(frame, Rect::new(area.x, y, area.w, h), *p, state.now_unix, theme);
+                draw_pool_card(
+                    frame,
+                    Rect::new(area.x, y, area.w, h),
+                    *p,
+                    state.now_unix,
+                    theme,
+                );
                 y = y.saturating_add(h);
             } else {
-                let eff = p.quota.effective_pct().map(|v| format!("{v:.1}%")).unwrap_or_else(|| "n/a".to_string());
+                let eff = p
+                    .quota
+                    .effective_pct()
+                    .map(|v| format!("{v:.1}%"))
+                    .unwrap_or_else(|| "n/a".to_string());
                 let cd = format_countdown(p.quota.next_reset_unix(), state.now_unix);
                 let line = format!("{:<18}  remaining: {:>6}  resets: {cd}", p.label, eff);
                 frame.surface.put_str(area.x, y, area.w, &line, theme.text);
@@ -468,7 +521,11 @@ fn render_failover_policy_view(
         y,
         area.w,
         &l1,
-        if state.policy_draft.dirty { theme.badge_low } else { theme.text_bold },
+        if state.policy_draft.dirty {
+            theme.badge_low
+        } else {
+            theme.text_bold
+        },
     );
     y = y.saturating_add(1);
     if y >= area.bottom() {
@@ -489,8 +546,16 @@ fn render_failover_policy_view(
         .map(|acc| evaluate_pool_failover(acc, pol, state.now_unix));
     if let Some(ref ev) = eval_opt {
         let sel_em = state.selected_email().unwrap_or_default();
-        let trig = if ev.failover_triggered { "TRIGGERED" } else { "OK" };
-        let repl = if ev.replacement_usable { "usable" } else { "not proven usable" };
+        let trig = if ev.failover_triggered {
+            "TRIGGERED"
+        } else {
+            "OK"
+        };
+        let repl = if ev.replacement_usable {
+            "usable"
+        } else {
+            "not proven usable"
+        };
         let l3 = format!(
             "Preview on {sel_em}: failover={trig}, standby={repl}, cache_fresh={}",
             ev.snapshot_fresh
@@ -567,7 +632,10 @@ pub fn render_overlays(frame: &mut Frame<'_>, state: &DeckState, theme: &Theme) 
         dim_backdrop(frame, theme);
         match state.modal {
             Modal::None | Modal::FilterInput => {}
-            Modal::CommandPalette { ref query, selected } => {
+            Modal::CommandPalette {
+                ref query,
+                selected,
+            } => {
                 render_command_palette(frame, query, selected, state, theme);
             }
             Modal::ConfirmSwitch { ref email } => {
@@ -591,7 +659,8 @@ pub fn render_overlays(frame: &mut Frame<'_>, state: &DeckState, theme: &Theme) 
             Modal::AddAccountHint => {
                 let body = [
                     "Open Google Account Chooser login to add an account?".to_string(),
-                    "Active ~/.gemini session stays untouched; quota syncs automatically.".to_string(),
+                    "Active ~/.gemini session stays untouched; quota syncs automatically."
+                        .to_string(),
                 ];
                 render_confirm_dialog(
                     frame,
@@ -645,30 +714,43 @@ fn render_command_palette(
     if rect.w < 12 || rect.h < 5 {
         return;
     }
-    frame.surface.draw_box(rect, theme.borders(), theme.modal_border, Some(theme.modal_bg));
+    frame.surface.draw_box(
+        rect,
+        theme.borders(),
+        theme.modal_border,
+        Some(theme.modal_bg),
+    );
     frame.hit(HitTarget::ModalBox.encode(), rect, PointerShape::Default);
     let inner = rect.inner(2, 1);
     if inner.is_empty() {
         return;
     }
     let mut y = inner.y;
-    frame.surface.put_str(inner.x, y, inner.w, "COMMAND PALETTE", theme.modal_title);
+    frame
+        .surface
+        .put_str(inner.x, y, inner.w, "COMMAND PALETTE", theme.modal_title);
     y = y.saturating_add(1);
     if y < inner.bottom() {
         let prompt = format!(": {query}_");
-        frame.surface.put_str(inner.x, y, inner.w, &prompt, theme.banner_info);
+        frame
+            .surface
+            .put_str(inner.x, y, inner.w, &prompt, theme.banner_info);
         y = y.saturating_add(1);
     }
     if y < inner.bottom() {
         let hch = if frame.ascii { '-' } else { '\u{2500}' };
-        frame.surface.fill(Rect::new(inner.x, y, inner.w, 1), hch, theme.divider);
+        frame
+            .surface
+            .fill(Rect::new(inner.x, y, inner.w, 1), hch, theme.divider);
         y = y.saturating_add(1);
     }
     let items = state.filtered_palette(query);
     let list_bottom = inner.bottom().saturating_sub(1);
     let cap = list_bottom.saturating_sub(y) as usize;
     if items.is_empty() && y < list_bottom {
-        frame.surface.put_str(inner.x, y, inner.w, "No matching commands", theme.muted);
+        frame
+            .surface
+            .put_str(inner.x, y, inner.w, "No matching commands", theme.muted);
     } else if cap > 0 && !items.is_empty() {
         let sel = selected.min(items.len() - 1);
         let start = if sel >= cap { sel + 1 - cap } else { 0 };
@@ -697,7 +779,9 @@ fn render_command_palette(
             let max_l = inner.w.saturating_sub(kw + 1);
             frame.surface.put_str(inner.x, y, max_l, &line, st);
             if kw < inner.w {
-                frame.surface.put_str(inner.right() - kw, y, kw, &key_badge, st);
+                frame
+                    .surface
+                    .put_str(inner.right() - kw, y, kw, &key_badge, st);
             }
             y = y.saturating_add(1);
         }
@@ -724,25 +808,38 @@ fn render_confirm_dialog(
 ) {
     let area = frame.size();
     let box_w = area.w.saturating_sub(4).clamp(24, 62);
-    let box_h = ((body.len() as u16) + 6).min(area.h.saturating_sub(2)).max(6);
+    let box_h = ((body.len() as u16) + 6)
+        .min(area.h.saturating_sub(2))
+        .max(6);
     let rect = centered_rect(area, box_w, box_h);
     if rect.w < 12 || rect.h < 5 {
         return;
     }
-    frame.surface.draw_box(rect, theme.borders(), theme.modal_border, Some(theme.modal_bg));
+    frame.surface.draw_box(
+        rect,
+        theme.borders(),
+        theme.modal_border,
+        Some(theme.modal_bg),
+    );
     frame.hit(HitTarget::ModalBox.encode(), rect, PointerShape::Default);
     let inner = rect.inner(2, 1);
     if inner.is_empty() {
         return;
     }
     let mut y = inner.y;
-    frame.surface.put_str(inner.x, y, inner.w, title, theme.modal_title);
+    frame
+        .surface
+        .put_str(inner.x, y, inner.w, title, theme.modal_title);
     y = y.saturating_add(2);
     for (idx, line) in body.iter().enumerate() {
         if y >= inner.bottom().saturating_sub(1) {
             break;
         }
-        let st = if idx == 0 { theme.modal_bg } else { theme.btn_idle };
+        let st = if idx == 0 {
+            theme.modal_bg
+        } else {
+            theme.btn_idle
+        };
         frame.surface.put_str(inner.x, y, inner.w, line, st);
         y = y.saturating_add(1);
     }
@@ -762,11 +859,19 @@ fn render_confirm_dialog(
         "  Cancel (n)  ".to_string()
     };
     let c_st = if c_sel {
-        if danger { theme.btn_danger } else { theme.btn_confirm }
+        if danger {
+            theme.btn_danger
+        } else {
+            theme.btn_confirm
+        }
     } else {
         theme.btn_idle
     };
-    let x_st = if x_sel { theme.btn_confirm } else { theme.btn_idle };
+    let x_st = if x_sel {
+        theme.btn_confirm
+    } else {
+        theme.btn_idle
+    };
     let cw = display_width(&c_txt) as u16;
     let xw = display_width(&x_txt) as u16;
     let mut bx = inner.x;
@@ -794,23 +899,38 @@ fn render_account_action_dialog(
     if rect.w < 14 || rect.h < 5 {
         return;
     }
-    frame.surface.draw_box(rect, theme.borders(), theme.modal_border, Some(theme.modal_bg));
+    frame.surface.draw_box(
+        rect,
+        theme.borders(),
+        theme.modal_border,
+        Some(theme.modal_bg),
+    );
     frame.hit(HitTarget::ModalBox.encode(), rect, PointerShape::Default);
     let inner = rect.inner(2, 1);
     if inner.is_empty() {
         return;
     }
     let mut y = inner.y;
-    frame.surface.put_str(inner.x, y, inner.w, "Account Session Action", theme.modal_title);
+    frame.surface.put_str(
+        inner.x,
+        y,
+        inner.w,
+        "Account Session Action",
+        theme.modal_title,
+    );
     y = y.saturating_add(1);
     if y < inner.bottom().saturating_sub(1) {
         let l1 = format!("Selected account: {email}");
-        frame.surface.put_str(inner.x, y, inner.w, &l1, theme.modal_bg);
+        frame
+            .surface
+            .put_str(inner.x, y, inner.w, &l1, theme.modal_bg);
         y = y.saturating_add(1);
     }
     if y < inner.bottom().saturating_sub(1) {
         let l2 = "Launch isolated agy (--use-account) or swap ~/.gemini IDE (restart IDE):";
-        frame.surface.put_str(inner.x, y, inner.w, l2, theme.btn_idle);
+        frame
+            .surface
+            .put_str(inner.x, y, inner.w, l2, theme.btn_idle);
     }
     let btn_y = inner.bottom().saturating_sub(1);
     let compact_btns = inner.w < 42;
@@ -818,12 +938,20 @@ fn render_account_action_dialog(
         (
             0usize,
             HitTarget::ModalConfirm.encode(),
-            if compact_btns { "[Launch]" } else { "[ Launch agy ]" },
+            if compact_btns {
+                "[Launch]"
+            } else {
+                "[ Launch agy ]"
+            },
         ),
         (
             1usize,
             HitTarget::ModalSecondary.encode(),
-            if compact_btns { "[IDE]" } else { "[ Switch IDE ]" },
+            if compact_btns {
+                "[IDE]"
+            } else {
+                "[ Switch IDE ]"
+            },
         ),
         (
             2usize,
@@ -835,7 +963,11 @@ fn render_account_action_dialog(
     let gap: u16 = if compact_btns { 1 } else { 2 };
     for (idx, hit_id, lbl) in specs {
         let active = state.modal_button_idx == idx || state.hover_hit == Some(hit_id);
-        let st = if active { theme.btn_confirm } else { theme.btn_idle };
+        let st = if active {
+            theme.btn_confirm
+        } else {
+            theme.btn_idle
+        };
         let lw = display_width(lbl) as u16;
         if bx.saturating_add(lw) <= inner.right() {
             frame.surface.put_str(bx, btn_y, lw, lbl, st);
@@ -853,30 +985,55 @@ fn render_shortcut_guide(frame: &mut Frame<'_>, state: &DeckState, theme: &Theme
         ("n", "Select next healthy standby account"),
         ("r / u", "Refresh all due accounts / selected account"),
         ("/", "Live filter accounts by email, name, alias, or tag"),
-        ("Ctrl+K / :", "Open searchable command palette (incl. Switch IDE)"),
+        (
+            "Ctrl+K / :",
+            "Open searchable command palette (incl. Switch IDE)",
+        ),
         ("v / f", "Quota Pools inspector / Pool Failover Policy"),
-        ("p / h / s / O / b", "Profiles, History, Settings, Doctor, Backup"),
-        ("a / i / d / m", "Add login, Import ~/.gemini, Delete, Migrate vault"),
+        (
+            "p / h / s / O / b",
+            "Profiles, History, Settings, Doctor, Backup",
+        ),
+        (
+            "a / i / d / m",
+            "Add login, Import ~/.gemini, Delete, Migrate vault",
+        ),
         ("w / y", "Verification link or switch mode / Ack restart"),
         ("[ / ] / =", "Resize split divider or reset to default"),
-        ("Mouse", "Click select, 2nd click action dialog, drag divider, wheel"),
+        (
+            "Mouse",
+            "Click select, 2nd click action dialog, drag divider, wheel",
+        ),
         ("? / Esc / q", "Toggle guide / Return to deck / Quit"),
     ];
     let area = frame.size();
     let box_w = area.w.saturating_sub(4).clamp(26, 72);
-    let box_h = ((GUIDE.len() as u16) + 5).min(area.h.saturating_sub(2)).max(7);
+    let box_h = ((GUIDE.len() as u16) + 5)
+        .min(area.h.saturating_sub(2))
+        .max(7);
     let rect = centered_rect(area, box_w, box_h);
     if rect.w < 14 || rect.h < 5 {
         return;
     }
-    frame.surface.draw_box(rect, theme.borders(), theme.modal_border, Some(theme.modal_bg));
+    frame.surface.draw_box(
+        rect,
+        theme.borders(),
+        theme.modal_border,
+        Some(theme.modal_bg),
+    );
     frame.hit(HitTarget::ModalBox.encode(), rect, PointerShape::Default);
     let inner = rect.inner(2, 1);
     if inner.is_empty() {
         return;
     }
     let mut y = inner.y;
-    frame.surface.put_str(inner.x, y, inner.w, "OPERATOR SHORTCUT GUIDE", theme.modal_title);
+    frame.surface.put_str(
+        inner.x,
+        y,
+        inner.w,
+        "OPERATOR SHORTCUT GUIDE",
+        theme.modal_title,
+    );
     y = y.saturating_add(1);
     let close_y = inner.bottom().saturating_sub(1);
     for &(keys, desc) in GUIDE {
@@ -884,7 +1041,9 @@ fn render_shortcut_guide(frame: &mut Frame<'_>, state: &DeckState, theme: &Theme
             break;
         }
         let line = format!("{keys:<19} {desc}");
-        frame.surface.put_str(inner.x, y, inner.w, &line, theme.modal_bg);
+        frame
+            .surface
+            .put_str(inner.x, y, inner.w, &line, theme.modal_bg);
         y = y.saturating_add(1);
     }
     let hit_id = HitTarget::ModalCancel.encode();
@@ -897,7 +1056,11 @@ fn render_shortcut_guide(frame: &mut Frame<'_>, state: &DeckState, theme: &Theme
     };
     if cw <= inner.w {
         frame.surface.put_str(inner.x, close_y, cw, close_lbl, st);
-        frame.hit(hit_id, Rect::new(inner.x, close_y, cw, 1), PointerShape::Pointer);
+        frame.hit(
+            hit_id,
+            Rect::new(inner.x, close_y, cw, 1),
+            PointerShape::Pointer,
+        );
     }
 }
 
@@ -924,11 +1087,18 @@ fn render_toast(frame: &mut Frame<'_>, toast: &Toast, theme: &Theme) {
         },
         ToastLevel::Info => theme.modal_border,
     };
-    let box_w = ((display_width(&toast.message) as u16) + 4)
-        .clamp(18, area.w.saturating_sub(4));
+    let box_w = ((display_width(&toast.message) as u16) + 4).clamp(18, area.w.saturating_sub(4));
     let x = area.right().saturating_sub(box_w + 1);
     let y = area.bottom().saturating_sub(5);
     let rect = Rect::new(x, y, box_w, 3);
-    frame.surface.draw_box(rect, theme.borders(), border, Some(theme.modal_bg));
-    frame.surface.put_str(rect.x + 2, rect.y + 1, rect.w.saturating_sub(4), &toast.message, border);
+    frame
+        .surface
+        .draw_box(rect, theme.borders(), border, Some(theme.modal_bg));
+    frame.surface.put_str(
+        rect.x + 2,
+        rect.y + 1,
+        rect.w.saturating_sub(4),
+        &toast.message,
+        border,
+    );
 }

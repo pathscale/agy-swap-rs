@@ -13,8 +13,15 @@ use super::{family_name, opt_flag, opt_str, parse_family, AppContext};
 
 fn validate_identifier(raw: &str, label: &str) -> Result<String, String> {
     let trimmed = raw.trim();
-    if trimmed.is_empty() || trimmed.len() > 64 || trimmed.chars().any(|c| c.is_whitespace() || c == '/' || c == '\\') {
-        return Err(format!("{label} must be 1-64 characters without spaces or slashes"));
+    if trimmed.is_empty()
+        || trimmed.len() > 64
+        || trimmed
+            .chars()
+            .any(|c| c.is_whitespace() || c == '/' || c == '\\')
+    {
+        return Err(format!(
+            "{label} must be 1-64 characters without spaces or slashes"
+        ));
     }
     Ok(trimmed.to_string())
 }
@@ -132,7 +139,10 @@ pub fn cmd_tag(ctx: &AppContext, m: &ArgMatches) -> i32 {
             if let Err(err) = ctx.store.save(&mut accounts) {
                 return ctx.fail("tag", err);
             }
-            let tags = accounts.get(&email).map(|a| a.tags.clone()).unwrap_or_default();
+            let tags = accounts
+                .get(&email)
+                .map(|a| a.tags.clone())
+                .unwrap_or_default();
             if ctx.json {
                 return ctx.ok_json(&format!("tag {sub}"), json!({"email": email, "tags": tags}));
             }
@@ -143,7 +153,9 @@ pub fn cmd_tag(ctx: &AppContext, m: &ArgMatches) -> i32 {
             let filter = opt_str(sub_m, "tag").map(|t| t.trim().to_ascii_lowercase());
             let mut rows = Vec::new();
             for em in &accounts.order {
-                let Some(acc) = accounts.get(em) else { continue };
+                let Some(acc) = accounts.get(em) else {
+                    continue;
+                };
                 if acc.tags.is_empty() {
                     continue;
                 }
@@ -178,15 +190,20 @@ pub fn cmd_profile(ctx: &AppContext, m: &ArgMatches) -> i32 {
     };
     match sub {
         "set" => {
-            let name = match validate_identifier(opt_str(sub_m, "name").unwrap_or(""), "profile name") {
-                Ok(n) => n,
-                Err(err) => return ctx.fail("profile set", err),
-            };
+            let name =
+                match validate_identifier(opt_str(sub_m, "name").unwrap_or(""), "profile name") {
+                    Ok(n) => n,
+                    Err(err) => return ctx.fail("profile set", err),
+                };
             let sel = opt_str(sub_m, "account").unwrap_or("");
             let Some(primary) = ctx.resolve_selector(&accounts, &settings, sel) else {
                 return ctx.fail("profile set", format!("account {sel:?} not found"));
             };
-            let family = match opt_str(sub_m, "family").or_else(|| opt_str(m, "family")).map(parse_family).transpose() {
+            let family = match opt_str(sub_m, "family")
+                .or_else(|| opt_str(m, "family"))
+                .map(parse_family)
+                .transpose()
+            {
                 Ok(f) => f,
                 Err(err) => return ctx.fail("profile set", err),
             };
@@ -202,7 +219,10 @@ pub fn cmd_profile(ctx: &AppContext, m: &ArgMatches) -> i32 {
                 for part in raw_res.split(',').map(str::trim).filter(|s| !s.is_empty()) {
                     match ctx.resolve_selector(&accounts, &settings, part) {
                         Some(em) => reserves.push(em),
-                        None => return ctx.fail("profile set", format!("reserve account {part:?} not found")),
+                        None => {
+                            return ctx
+                                .fail("profile set", format!("reserve account {part:?} not found"))
+                        }
                     }
                 }
             }
@@ -213,7 +233,14 @@ pub fn cmd_profile(ctx: &AppContext, m: &ArgMatches) -> i32 {
                 },
                 None => settings.min_remaining_pct,
             };
-            let prof = Profile { name: name.clone(), primary, family, policy, reserves, threshold_pct };
+            let prof = Profile {
+                name: name.clone(),
+                primary,
+                family,
+                policy,
+                reserves,
+                threshold_pct,
+            };
             settings.profiles.insert(name.clone(), prof.clone());
             if let Err(err) = ctx.store.save_settings(&settings) {
                 return ctx.fail("profile set", err);
@@ -241,7 +268,10 @@ pub fn cmd_profile(ctx: &AppContext, m: &ArgMatches) -> i32 {
                 return ctx.ok_json("profile list", json!({"profiles": settings.profiles}));
             }
             for (name, prof) in &settings.profiles {
-                println!("{name:<18} primary={} policy={} threshold={}%", prof.primary, prof.policy, prof.threshold_pct);
+                println!(
+                    "{name:<18} primary={} policy={} threshold={}%",
+                    prof.primary, prof.policy, prof.threshold_pct
+                );
             }
             0
         }
@@ -274,7 +304,11 @@ pub fn cmd_bind(ctx: &AppContext, m: &ArgMatches) -> i32 {
                 None => BindMode::Prompt,
             };
             settings.bindings.retain(|b| b.path != path);
-            let binding = DirectoryBinding { path: path.clone(), profile: prof_name.clone(), mode };
+            let binding = DirectoryBinding {
+                path: path.clone(),
+                profile: prof_name.clone(),
+                mode,
+            };
             settings.bindings.push(binding.clone());
             if let Err(err) = ctx.store.save_settings(&settings) {
                 return ctx.fail("bind set", err);
@@ -319,7 +353,9 @@ pub fn cmd_recommend(ctx: &AppContext, m: &ArgMatches) -> i32 {
         let _ = refresh_accounts_live(ctx, &mut accounts, true);
     }
     let settings = ctx.store.load_settings().unwrap_or_default();
-    let dir = opt_str(m, "dir").map(str::to_string).unwrap_or_else(current_working_dir);
+    let dir = opt_str(m, "dir")
+        .map(str::to_string)
+        .unwrap_or_else(current_working_dir);
     let prof_name = opt_str(m, "profile")
         .map(str::to_string)
         .or_else(|| match_binding_for_dir(&settings.bindings, &dir).map(|b| b.profile.clone()));
@@ -343,11 +379,23 @@ pub fn cmd_recommend(ctx: &AppContext, m: &ArgMatches) -> i32 {
     };
     let active = ctx.active_email(&accounts);
     let now_unix = agy_core::paths::wall_unix_secs();
-    let rec = recommend(&accounts, active.as_deref(), family, policy, settings.min_remaining_pct, profile, now_unix);
+    let rec = recommend(
+        &accounts,
+        active.as_deref(),
+        family,
+        policy,
+        settings.min_remaining_pct,
+        profile,
+        now_unix,
+    );
     let mut applied = false;
     if opt_flag(m, "apply") {
         if let Some(ref target) = rec.selected_email {
-            if !active.as_deref().map(|a| a.eq_ignore_ascii_case(target)).unwrap_or(false) {
+            if !active
+                .as_deref()
+                .map(|a| a.eq_ignore_ascii_case(target))
+                .unwrap_or(false)
+            {
                 if let Some(acc) = accounts.get(target) {
                     match ctx.account_token(acc) {
                         Ok(tok) => {
@@ -366,7 +414,13 @@ pub fn cmd_recommend(ctx: &AppContext, m: &ArgMatches) -> i32 {
     if ctx.json {
         return ctx.ok_json("recommend", json!({"recommendation": rec, "active": active, "applied": applied, "profile": prof_name}));
     }
-    println!("{}Recommended:{} {} ({})", ctx.palette.bold, ctx.palette.reset, rec.selected_email.as_deref().unwrap_or("none"), rec.reason);
+    println!(
+        "{}Recommended:{} {} ({})",
+        ctx.palette.bold,
+        ctx.palette.reset,
+        rec.selected_email.as_deref().unwrap_or("none"),
+        rec.reason
+    );
     for (em, score, ok) in &rec.candidates {
         let status = if *ok { "eligible" } else { "ineligible" };
         println!("  {em:<30} {:6.1}%  {status}", score);
@@ -396,22 +450,39 @@ pub fn cmd_ensure_active(ctx: &AppContext, m: &ArgMatches) -> i32 {
                 || !ctx.has_token(acc)
                 || acc.is_cooled_down(family, now_unix)
                 || evaluate_pool_failover(acc, &settings.pool_failover, now_unix).failover_triggered
-                || acc.family_pct(family).map(|p| p <= f64::from(settings.min_remaining_pct)).unwrap_or(false)
+                || acc
+                    .family_pct(family)
+                    .map(|p| p <= f64::from(settings.min_remaining_pct))
+                    .unwrap_or(false)
         }
     };
     if !active_unhealthy {
         if ctx.json {
-            return ctx.ok_json("ensure-active", json!({"triggered": false, "active": active, "switched_to": Value::Null}));
+            return ctx.ok_json(
+                "ensure-active",
+                json!({"triggered": false, "active": active, "switched_to": Value::Null}),
+            );
         }
         println!("active-ok: {}", active.as_deref().unwrap_or("-"));
         return 0;
     }
-    let target = select_next(&accounts, active.as_deref(), family, settings.default_policy, settings.min_remaining_pct, now_unix);
+    let target = select_next(
+        &accounts,
+        active.as_deref(),
+        family,
+        settings.default_policy,
+        settings.min_remaining_pct,
+        now_unix,
+    );
     let can_switch = settings.switch_mode == SwitchMode::Auto || opt_flag(m, "force");
     let mut switched_to: Option<String> = None;
     if can_switch {
         if let Some(ref next_em) = target {
-            if !active.as_deref().map(|a| a.eq_ignore_ascii_case(next_em)).unwrap_or(false) {
+            if !active
+                .as_deref()
+                .map(|a| a.eq_ignore_ascii_case(next_em))
+                .unwrap_or(false)
+            {
                 if let Some(acc) = accounts.get(next_em) {
                     if let Ok(tok) = ctx.account_token(acc) {
                         if ctx.session.switch_to(next_em, &tok).is_ok() {
@@ -430,7 +501,10 @@ pub fn cmd_ensure_active(ctx: &AppContext, m: &ArgMatches) -> i32 {
     if let Some(sw) = switched_to {
         println!("ensured-active: {sw}");
     } else {
-        println!("ensure-active: recommended {}", target.as_deref().unwrap_or("none"));
+        println!(
+            "ensure-active: recommended {}",
+            target.as_deref().unwrap_or("none")
+        );
     }
     0
 }
@@ -449,23 +523,51 @@ pub fn cmd_resolve_route(ctx: &AppContext, m: &ArgMatches) -> i32 {
     let strategy = match opt_str(m, "fallback_strategy") {
         Some(raw) => match RouteStrategy::parse(raw) {
             Some(s) => s,
-            None => return ctx.fail("resolve-route", format!("invalid fallback strategy {raw:?}")),
+            None => {
+                return ctx.fail(
+                    "resolve-route",
+                    format!("invalid fallback strategy {raw:?}"),
+                )
+            }
         },
         None => settings.route_strategy,
     };
     let force_switch = opt_flag(m, "force_switch") || opt_flag(m, "force");
     let now_unix = agy_core::paths::wall_unix_secs();
-    let decision = match resolve_route(&accounts, &ctx.vault, &ctx.session, family, strategy, settings.switch_mode, settings.min_remaining_pct, force_switch, now_unix) {
+    let decision = match resolve_route(
+        &accounts,
+        &ctx.vault,
+        &ctx.session,
+        family,
+        strategy,
+        settings.switch_mode,
+        settings.min_remaining_pct,
+        force_switch,
+        now_unix,
+    ) {
         Ok(d) => d,
         Err(err) => return ctx.fail("resolve-route", err),
     };
     if decision.switched {
-        ctx.record_history("resolve_route", decision.active_email.as_deref(), &decision.outcome);
+        ctx.record_history(
+            "resolve_route",
+            decision.active_email.as_deref(),
+            &decision.outcome,
+        );
     }
     if ctx.json {
         return ctx.ok_json("resolve-route", json!(decision));
     }
-    println!("route: account={} family={} outcome={}", decision.active_email.as_deref().or(decision.recommended_email.as_deref()).unwrap_or("-"), family_name(decision.selected_family), decision.outcome);
+    println!(
+        "route: account={} family={} outcome={}",
+        decision
+            .active_email
+            .as_deref()
+            .or(decision.recommended_email.as_deref())
+            .unwrap_or("-"),
+        family_name(decision.selected_family),
+        decision.outcome
+    );
     0
 }
 
@@ -485,19 +587,38 @@ pub fn cmd_rotate_after_failure(ctx: &AppContext, m: &ArgMatches) -> i32 {
     };
     let force_switch = opt_flag(m, "force_switch") || opt_flag(m, "force");
     let now_unix = agy_core::paths::wall_unix_secs();
-    let res = match rotate_after_failure(&ctx.paths, &ctx.store, &ctx.vault, &ctx.session, settings.switch_mode, reason, family, cooldown_secs, DEFAULT_FAILOVER_DEDUPE_SECS, force_switch, now_unix) {
+    let res = match rotate_after_failure(
+        &ctx.paths,
+        &ctx.store,
+        &ctx.vault,
+        &ctx.session,
+        settings.switch_mode,
+        reason,
+        family,
+        cooldown_secs,
+        DEFAULT_FAILOVER_DEDUPE_SECS,
+        force_switch,
+        now_unix,
+    ) {
         Ok(r) => r,
         Err(err) => return ctx.fail("rotate-after-failure", err),
     };
     if ctx.json {
         return ctx.ok_json("rotate-after-failure", json!(res));
     }
-    println!("failover: outcome={} switched_to={}", res.outcome, res.switched_to.as_deref().unwrap_or("-"));
+    println!(
+        "failover: outcome={} switched_to={}",
+        res.outcome,
+        res.switched_to.as_deref().unwrap_or("-")
+    );
     0
 }
 
 pub fn cmd_quota_policy(ctx: &AppContext, m: &ArgMatches) -> i32 {
-    let accounts = ctx.store.load().unwrap_or_else(|_| agy_core::Accounts::new());
+    let accounts = ctx
+        .store
+        .load()
+        .unwrap_or_else(|_| agy_core::Accounts::new());
     let mut settings = match ctx.store.load_settings() {
         Ok(s) => s,
         Err(err) => return ctx.fail("quota-policy", err),
@@ -512,7 +633,10 @@ pub fn cmd_quota_policy(ctx: &AppContext, m: &ArgMatches) -> i32 {
         changed = true;
     }
     if let Some(vals) = m.try_get_many::<String>("pool").ok().flatten() {
-        settings.pool_failover.checked_pools = vals.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+        settings.pool_failover.checked_pools = vals
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
         changed = true;
     }
     if let Some(raw_mode) = opt_str(m, "match_mode") {
@@ -543,10 +667,20 @@ pub fn cmd_quota_policy(ctx: &AppContext, m: &ArgMatches) -> i32 {
     }
     let known = discover_pool_names(&accounts);
     if ctx.json {
-        return ctx.ok_json("quota-policy", json!({"policy": settings.pool_failover, "known_pools": known}));
+        return ctx.ok_json(
+            "quota-policy",
+            json!({"policy": settings.pool_failover, "known_pools": known}),
+        );
     }
     let pol = &settings.pool_failover;
-    println!("enabled={} match={} threshold={}% max_age={}s pools=[{}]", pol.enabled, pol.match_mode, pol.threshold_pct, pol.max_age_secs, pol.checked_pools.join(", "));
+    println!(
+        "enabled={} match={} threshold={}% max_age={}s pools=[{}]",
+        pol.enabled,
+        pol.match_mode,
+        pol.threshold_pct,
+        pol.max_age_secs,
+        pol.checked_pools.join(", ")
+    );
     0
 }
 
@@ -557,7 +691,10 @@ pub fn cmd_switch_mode(ctx: &AppContext, m: &ArgMatches) -> i32 {
     };
     if let Some(raw) = opt_str(m, "mode") {
         let Some(mode) = SwitchMode::parse(raw) else {
-            return ctx.fail("switch-mode", format!("invalid switch mode {raw:?} (expected auto or manual)"));
+            return ctx.fail(
+                "switch-mode",
+                format!("invalid switch mode {raw:?} (expected auto or manual)"),
+            );
         };
         settings.switch_mode = mode;
         if let Err(err) = ctx.store.save_settings(&settings) {

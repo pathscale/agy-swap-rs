@@ -12,7 +12,10 @@ use agy_core::{Account, Accounts, ModelFamily, PoolQuota};
 use clap::ArgMatches;
 use serde_json::{json, Value};
 
-use super::{explicit_account, family_name, format_duration_secs, format_reset_countdown, opt_flag, opt_str, parse_duration_secs, parse_family, AppContext};
+use super::{
+    explicit_account, family_name, format_duration_secs, format_reset_countdown, opt_flag, opt_str,
+    parse_duration_secs, parse_family, AppContext,
+};
 
 pub(crate) fn read_stdin_bounded(max_bytes: usize) -> Result<String, String> {
     use std::io::Read;
@@ -35,7 +38,10 @@ pub(crate) fn open_https_url(url: &str) -> Result<(), String> {
     let opener = "open";
     #[cfg(not(target_os = "macos"))]
     let opener = "xdg-open";
-    match eko::command::Command::new(opener).arg(url.as_bytes()).output() {
+    match eko::command::Command::new(opener)
+        .arg(url.as_bytes())
+        .output()
+    {
         Some(out) if out.success() => Ok(()),
         Some(out) => Err(format!("{opener} exited with status {}", out.code)),
         None => Err(format!("failed to launch {opener}")),
@@ -58,10 +64,17 @@ fn pool_json(pool: &PoolQuota) -> Value {
     })
 }
 
-pub(crate) fn account_json(ctx: &AppContext, account: &Account, active_email: Option<&str>, now_unix: i64) -> Value {
+pub(crate) fn account_json(
+    ctx: &AppContext,
+    account: &Account,
+    active_email: Option<&str>,
+    now_unix: i64,
+) -> Value {
     let has_tok = ctx.has_token(account);
     let badge = account.badge(has_tok, now_unix);
-    let active = active_email.map(|a| a.eq_ignore_ascii_case(&account.email)).unwrap_or(false);
+    let active = active_email
+        .map(|a| a.eq_ignore_ascii_case(&account.email))
+        .unwrap_or(false);
     let quota_val = account.quota.as_ref().map(|q| {
         let extra: Vec<Value> = q.extra_pools.iter().map(pool_json).collect();
         json!({
@@ -93,7 +106,11 @@ pub(crate) fn account_json(ctx: &AppContext, account: &Account, active_email: Op
     })
 }
 
-pub(crate) fn refresh_accounts_live(ctx: &AppContext, accounts: &mut Accounts, force: bool) -> Vec<(String, String)> {
+pub(crate) fn refresh_accounts_live(
+    ctx: &AppContext,
+    accounts: &mut Accounts,
+    force: bool,
+) -> Vec<(String, String)> {
     let http = match HttpClient::new() {
         Ok(h) => h,
         Err(err) => return vec![("http".to_string(), err.to_string())],
@@ -119,13 +136,21 @@ fn validate_alias_opt(raw: Option<&str>) -> Result<Option<String>, String> {
     let Some(val) = raw.map(str::trim).filter(|s| !s.is_empty()) else {
         return Ok(None);
     };
-    if val.len() > 64 || val.chars().any(|c| c.is_whitespace() || c == '/' || c == '\\') {
+    if val.len() > 64
+        || val
+            .chars()
+            .any(|c| c.is_whitespace() || c == '/' || c == '\\')
+    {
         return Err("alias must be 1-64 characters without spaces or slashes".to_string());
     }
     Ok(Some(val.to_string()))
 }
 
-fn authenticate_bundle(ctx: &AppContext, via_agy: bool, no_browser: bool) -> Result<TokenBundle, String> {
+fn authenticate_bundle(
+    ctx: &AppContext,
+    via_agy: bool,
+    no_browser: bool,
+) -> Result<TokenBundle, String> {
     let force_agy = via_agy
         || eko::env::var("AGY_SWAP_LOGIN_MODE")
             .map(|v| v.trim().eq_ignore_ascii_case("agy"))
@@ -150,15 +175,24 @@ fn save_onboarded_account(
     explicit_name: Option<&str>,
     alias_opt: Option<String>,
 ) -> Result<Value, String> {
-    let explicit_email = explicit_email.map(|e| e.trim().to_ascii_lowercase()).filter(|s| !s.is_empty());
-    let explicit_name = explicit_name.map(|n| n.trim().to_string()).filter(|s| !s.is_empty());
+    let explicit_email = explicit_email
+        .map(|e| e.trim().to_ascii_lowercase())
+        .filter(|s| !s.is_empty());
+    let explicit_name = explicit_name
+        .map(|n| n.trim().to_string())
+        .filter(|s| !s.is_empty());
     if let (Some(hint), Some(exp)) = (&bundle.email_hint, &explicit_email) {
         if !hint.eq_ignore_ascii_case(exp) {
-            return Err(format!("token identity {hint} does not match --email {exp}"));
+            return Err(format!(
+                "token identity {hint} does not match --email {exp}"
+            ));
         }
     }
     let offline = eko::env::var("AGY_SWAP_OFFLINE").as_deref() == Some("1");
-    let (email, resolved_name) = if !offline && bundle.email_hint.is_none() && explicit_email.is_none() {
+    let (email, resolved_name) = if !offline
+        && bundle.email_hint.is_none()
+        && explicit_email.is_none()
+    {
         match HttpClient::new().and_then(|http| fetch_verified_email(&http, &bundle.access_token)) {
             Ok((em, nm)) => (em.to_ascii_lowercase(), nm),
             Err(err) => return Err(err.to_string()),
@@ -174,7 +208,9 @@ fn save_onboarded_account(
     let name = explicit_name.unwrap_or(resolved_name);
     let mut accounts = ctx.store.load().map_err(|e| e.to_string())?;
     let vault_key = format!("account:{email}");
-    ctx.vault.set(&vault_key, &bundle.raw_json).map_err(|e| e.to_string())?;
+    ctx.vault
+        .set(&vault_key, &bundle.raw_json)
+        .map_err(|e| e.to_string())?;
     let mut account = accounts.get(&email).cloned().unwrap_or_else(|| Account {
         email: email.clone(),
         name: name.clone(),
@@ -247,7 +283,14 @@ pub fn cmd_import_current(ctx: &AppContext, m: &ArgMatches) -> i32 {
         Ok(b) => b,
         Err(err) => return ctx.fail("import-current", err),
     };
-    let saved = match save_onboarded_account(ctx, "import-current", bundle, opt_str(m, "email"), opt_str(m, "name"), alias_opt) {
+    let saved = match save_onboarded_account(
+        ctx,
+        "import-current",
+        bundle,
+        opt_str(m, "email"),
+        opt_str(m, "name"),
+        alias_opt,
+    ) {
         Ok(v) => v,
         Err(err) => return ctx.fail("import-current", err),
     };
@@ -311,7 +354,10 @@ pub fn cmd_login(ctx: &AppContext, m: &ArgMatches) -> i32 {
         if count == 1 {
             return ctx.ok_json("login", results.into_iter().next().unwrap_or(Value::Null));
         }
-        return ctx.ok_json("login", json!({"count": results.len(), "accounts": results}));
+        return ctx.ok_json(
+            "login",
+            json!({"count": results.len(), "accounts": results}),
+        );
     }
     0
 }
@@ -349,7 +395,11 @@ pub fn cmd_add(ctx: &AppContext, m: &ArgMatches) -> i32 {
         let trimmed = dir.trim_end_matches('/');
         let primary = format!("{trimmed}/antigravity-oauth-token");
         let fallback = format!("{trimmed}/oauth_creds.json");
-        let path = if eko::fs::exists(primary.as_bytes()) { primary } else { fallback };
+        let path = if eko::fs::exists(primary.as_bytes()) {
+            primary
+        } else {
+            fallback
+        };
         let raw_token = match eko::file::read(&path) {
             Ok(bytes) => match String::from_utf8(bytes) {
                 Ok(s) => s,
@@ -367,7 +417,14 @@ pub fn cmd_add(ctx: &AppContext, m: &ArgMatches) -> i32 {
             Err(err) => return ctx.fail("add", err),
         }
     };
-    let saved = match save_onboarded_account(ctx, "add", bundle, opt_str(m, "email"), opt_str(m, "name"), alias_opt) {
+    let saved = match save_onboarded_account(
+        ctx,
+        "add",
+        bundle,
+        opt_str(m, "email"),
+        opt_str(m, "name"),
+        alias_opt,
+    ) {
         Ok(v) => v,
         Err(err) => return ctx.fail("add", err),
     };
@@ -401,7 +458,9 @@ pub fn cmd_list(ctx: &AppContext, m: &ArgMatches) -> i32 {
     let now_unix = agy_core::paths::wall_unix_secs();
     let mut items = Vec::new();
     for (idx, email) in accounts.order.iter().enumerate() {
-        let Some(acc) = accounts.get(email) else { continue };
+        let Some(acc) = accounts.get(email) else {
+            continue;
+        };
         if let Some(tag) = &tag_filter {
             if !acc.tags.iter().any(|t| t.eq_ignore_ascii_case(tag)) {
                 continue;
@@ -417,12 +476,20 @@ pub fn cmd_list(ctx: &AppContext, m: &ArgMatches) -> i32 {
         return ctx.ok_json("list", json!({"active": active, "accounts": rows}));
     }
     if items.is_empty() {
-        println!("No saved accounts. Run 'agy-swap-rs add' or 'agy-swap-rs import-current' to add one.");
+        println!(
+            "No saved accounts. Run 'agy-swap-rs add' or 'agy-swap-rs import-current' to add one."
+        );
         return 0;
     }
-    println!("{} #   ACCOUNT                        BADGE             GEMINI               CLAUDE/GPT{}", ctx.palette.bold, ctx.palette.reset);
+    println!(
+        "{} #   ACCOUNT                        BADGE             GEMINI               CLAUDE/GPT{}",
+        ctx.palette.bold, ctx.palette.reset
+    );
     for (slot, acc) in items {
-        let is_active = active.as_deref().map(|a| a.eq_ignore_ascii_case(&acc.email)).unwrap_or(false);
+        let is_active = active
+            .as_deref()
+            .map(|a| a.eq_ignore_ascii_case(&acc.email))
+            .unwrap_or(false);
         let marker = if is_active { "*" } else { " " };
         let iso_n = active_isolated_sessions(&ctx.paths, &acc.email);
         let acct_col = if iso_n == 1 {
@@ -432,12 +499,17 @@ pub fn cmd_list(ctx: &AppContext, m: &ArgMatches) -> i32 {
         } else {
             acc.email.clone()
         };
-        let badge = ctx.palette.badge_text(acc.badge(ctx.has_token(acc), now_unix));
+        let badge = ctx
+            .palette
+            .badge_text(acc.badge(ctx.has_token(acc), now_unix));
         let gem_pct = acc.family_pct(Some(family.unwrap_or(ModelFamily::Gemini)));
         let cg_pct = acc.family_pct(Some(ModelFamily::Claude));
         let gem_bar = ctx.palette.gauge(gem_pct, 10, ctx.ascii);
         let cg_bar = ctx.palette.gauge(cg_pct, 10, ctx.ascii);
-        println!("{marker}{slot:<2}  {acct_col:<29} {:<17} {gem_bar}  {cg_bar}", badge);
+        println!(
+            "{marker}{slot:<2}  {acct_col:<29} {:<17} {gem_bar}  {cg_bar}",
+            badge
+        );
     }
     0
 }
@@ -470,18 +542,38 @@ pub fn cmd_limits(ctx: &AppContext, m: &ArgMatches) -> i32 {
             .filter_map(|em| accounts.get(em))
             .map(|acc| account_json(ctx, acc, active.as_deref(), now_unix))
             .collect();
-        return ctx.ok_json("limits", json!({"active": active, "accounts": rows, "errors": failures}));
+        return ctx.ok_json(
+            "limits",
+            json!({"active": active, "accounts": rows, "errors": failures}),
+        );
     }
     for email in &accounts.order {
-        if target.as_deref().map(|t| t != email.as_str()).unwrap_or(false) {
+        if target
+            .as_deref()
+            .map(|t| t != email.as_str())
+            .unwrap_or(false)
+        {
             continue;
         }
-        let Some(acc) = accounts.get(email) else { continue };
-        let badge = ctx.palette.badge_text(acc.badge(ctx.has_token(acc), now_unix));
-        println!("{}{} [{}]{}", ctx.palette.bold, acc.email, badge, ctx.palette.reset);
+        let Some(acc) = accounts.get(email) else {
+            continue;
+        };
+        let badge = ctx
+            .palette
+            .badge_text(acc.badge(ctx.has_token(acc), now_unix));
+        println!(
+            "{}{} [{}]{}",
+            ctx.palette.bold, acc.email, badge, ctx.palette.reset
+        );
         if let Some(q) = &acc.quota {
-            for pool in core::iter::once(&q.gemini).chain(core::iter::once(&q.claude_gpt)).chain(q.argon.iter()).chain(q.extra_pools.iter()) {
-                let b5 = ctx.palette.gauge(pool.five_hour.remaining_pct, 12, ctx.ascii);
+            for pool in core::iter::once(&q.gemini)
+                .chain(core::iter::once(&q.claude_gpt))
+                .chain(q.argon.iter())
+                .chain(q.extra_pools.iter())
+            {
+                let b5 = ctx
+                    .palette
+                    .gauge(pool.five_hour.remaining_pct, 12, ctx.ascii);
                 let bw = ctx.palette.gauge(pool.weekly.remaining_pct, 12, ctx.ascii);
                 let rst = format_reset_countdown(pool.next_reset_unix(), now_unix);
                 println!("  {:<16} 5h {b5}  wk {bw}  reset {rst}", pool.name);
@@ -503,7 +595,8 @@ pub fn cmd_limit(ctx: &AppContext, m: &ArgMatches) -> i32 {
     };
     let settings = ctx.store.load_settings().unwrap_or_default();
     let (sel, dur_opt) = if sub == "clear" {
-        let Some(s) = explicit_account(sub_m, "account").or_else(|| opt_str(m, "use_account")) else {
+        let Some(s) = explicit_account(sub_m, "account").or_else(|| opt_str(m, "use_account"))
+        else {
             return ctx.fail_usage(
                 "limit clear",
                 "--use-account=<slot|alias|email> or ACCOUNT argument is required",
@@ -528,7 +621,11 @@ pub fn cmd_limit(ctx: &AppContext, m: &ArgMatches) -> i32 {
     let Some(email) = ctx.resolve_selector(&accounts, &settings, sel) else {
         return ctx.fail("limit", format!("account {sel:?} not found"));
     };
-    let family = match opt_str(sub_m, "family").or_else(|| opt_str(m, "family")).map(parse_family).transpose() {
+    let family = match opt_str(sub_m, "family")
+        .or_else(|| opt_str(m, "family"))
+        .map(parse_family)
+        .transpose()
+    {
         Ok(f) => f,
         Err(err) => return ctx.fail("limit", err),
     };
@@ -569,9 +666,15 @@ pub fn cmd_limit(ctx: &AppContext, m: &ArgMatches) -> i32 {
     }
     ctx.record_history("limit_set", Some(&email), &format!("{key}:{secs}s"));
     if ctx.json {
-        return ctx.ok_json("limit set", json!({"email": email, "family": key, "reset_at_unix": now_unix + secs}));
+        return ctx.ok_json(
+            "limit set",
+            json!({"email": email, "family": key, "reset_at_unix": now_unix + secs}),
+        );
     }
-    println!("Set {key} cooldown on {email} for {}.", format_duration_secs(secs));
+    println!(
+        "Set {key} cooldown on {email} for {}.",
+        format_duration_secs(secs)
+    );
     0
 }
 
@@ -588,7 +691,10 @@ pub fn switch_by_selector(ctx: &AppContext, selector: &str, force: bool) -> i32 
         return ctx.fail("switch", "account missing");
     };
     if acc.disabled && !force {
-        return ctx.fail("switch", format!("account {email} is disabled; pass --force to switch anyway"));
+        return ctx.fail(
+            "switch",
+            format!("account {email} is disabled; pass --force to switch anyway"),
+        );
     }
     let token = match ctx.account_token(acc) {
         Ok(t) => t,
@@ -598,11 +704,18 @@ pub fn switch_by_selector(ctx: &AppContext, selector: &str, force: bool) -> i32 
     if let Err(err) = ctx.session.switch_to(&email, &token) {
         return ctx.fail("switch", err);
     }
-    ctx.record_history("switch", Some(&email), previous.as_deref().unwrap_or("none"));
+    ctx.record_history(
+        "switch",
+        Some(&email),
+        previous.as_deref().unwrap_or("none"),
+    );
     if ctx.json {
         return ctx.ok_json("switch", json!({"previous": previous, "active": email}));
     }
-    println!("{}✓ Switched active session to {email}{}", ctx.palette.green, ctx.palette.reset);
+    println!(
+        "{}✓ Switched active session to {email}{}",
+        ctx.palette.green, ctx.palette.reset
+    );
     0
 }
 
@@ -631,7 +744,14 @@ pub fn cmd_next(ctx: &AppContext, m: &ArgMatches) -> i32 {
     let settings = ctx.store.load_settings().unwrap_or_default();
     let active = ctx.active_email(&accounts);
     let now_unix = agy_core::paths::wall_unix_secs();
-    let Some(next_email) = select_next(&accounts, active.as_deref(), family, settings.default_policy, settings.min_remaining_pct, now_unix) else {
+    let Some(next_email) = select_next(
+        &accounts,
+        active.as_deref(),
+        family,
+        settings.default_policy,
+        settings.min_remaining_pct,
+        now_unix,
+    ) else {
         return ctx.fail("next", "no eligible standby account available");
     };
     let Some(acc) = accounts.get(&next_email) else {
@@ -644,11 +764,18 @@ pub fn cmd_next(ctx: &AppContext, m: &ArgMatches) -> i32 {
     if let Err(err) = ctx.session.switch_to(&next_email, &token) {
         return ctx.fail("next", err);
     }
-    ctx.record_history("rotate", Some(&next_email), active.as_deref().unwrap_or("none"));
+    ctx.record_history(
+        "rotate",
+        Some(&next_email),
+        active.as_deref().unwrap_or("none"),
+    );
     if ctx.json {
         return ctx.ok_json("next", json!({"previous": active, "active": next_email}));
     }
-    println!("{}✓ Rotated active session to {next_email}{}", ctx.palette.green, ctx.palette.reset);
+    println!(
+        "{}✓ Rotated active session to {next_email}{}",
+        ctx.palette.green, ctx.palette.reset
+    );
     0
 }
 
@@ -662,8 +789,16 @@ pub fn remove_by_selector(ctx: &AppContext, selector: &str, force: bool) -> i32 
         return ctx.fail("remove", format!("account {selector:?} not found"));
     };
     let active = ctx.active_email(&accounts);
-    if active.as_deref().map(|a| a.eq_ignore_ascii_case(&email)).unwrap_or(false) && !force {
-        return ctx.fail("remove", format!("{email} is currently active; pass --force to remove it"));
+    if active
+        .as_deref()
+        .map(|a| a.eq_ignore_ascii_case(&email))
+        .unwrap_or(false)
+        && !force
+    {
+        return ctx.fail(
+            "remove",
+            format!("{email} is currently active; pass --force to remove it"),
+        );
     }
     let Some(removed) = accounts.remove(&email) else {
         return ctx.fail("remove", "account not found");
@@ -731,12 +866,23 @@ pub fn cmd_status(ctx: &AppContext, m: &ArgMatches) -> i32 {
     };
     println!("{}Active:{} {em}", ctx.palette.bold, ctx.palette.reset);
     if let Some(acc) = active_acc {
-        let badge = ctx.palette.badge_text(acc.badge(ctx.has_token(acc), now_unix));
-        let gem = ctx.palette.gauge(acc.family_pct(Some(ModelFamily::Gemini)), 12, ctx.ascii);
-        let cg = ctx.palette.gauge(acc.family_pct(Some(ModelFamily::Claude)), 12, ctx.ascii);
+        let badge = ctx
+            .palette
+            .badge_text(acc.badge(ctx.has_token(acc), now_unix));
+        let gem = ctx
+            .palette
+            .gauge(acc.family_pct(Some(ModelFamily::Gemini)), 12, ctx.ascii);
+        let cg = ctx
+            .palette
+            .gauge(acc.family_pct(Some(ModelFamily::Claude)), 12, ctx.ascii);
         println!("Status: {badge}  Gemini {gem}  Claude/GPT {cg}");
     }
-    if runtime_val.as_ref().and_then(|v| v.get("restart_agy_needed")).and_then(Value::as_bool) == Some(true) {
+    if runtime_val
+        .as_ref()
+        .and_then(|v| v.get("restart_agy_needed"))
+        .and_then(Value::as_bool)
+        == Some(true)
+    {
         println!("{}! Restart agy CLI to pick up switched credentials (then run 'agy-swap-rs ack-restart'){}", ctx.palette.yellow, ctx.palette.reset);
     }
     0
@@ -777,9 +923,16 @@ pub fn cmd_verify(ctx: &AppContext, m: &ArgMatches) -> i32 {
         }
         let has_tok = ctx.has_token(acc);
         if ctx.json {
-            return ctx.ok_json("verify", json!({"email": email, "has_token": has_tok, "verify_url": acc.verify_url}));
+            return ctx.ok_json(
+                "verify",
+                json!({"email": email, "has_token": has_tok, "verify_url": acc.verify_url}),
+            );
         }
-        println!("{email}: token={} verify_url={}", has_tok, acc.verify_url.as_deref().unwrap_or("none"));
+        println!(
+            "{email}: token={} verify_url={}",
+            has_tok,
+            acc.verify_url.as_deref().unwrap_or("none")
+        );
         return 0;
     }
     if !opt_flag(m, "all") {
@@ -790,7 +943,9 @@ pub fn cmd_verify(ctx: &AppContext, m: &ArgMatches) -> i32 {
     }
     let mut report = Vec::new();
     for email in &accounts.order {
-        let Some(acc) = accounts.get(email) else { continue };
+        let Some(acc) = accounts.get(email) else {
+            continue;
+        };
         let has_tok = ctx.has_token(acc);
         let badge = acc.badge(has_tok, now_unix);
         report.push(json!({
@@ -822,7 +977,9 @@ pub fn cmd_account(ctx: &AppContext, m: &ArgMatches) -> i32 {
     match sub {
         "list" => cmd_list(ctx, sub_m),
         "show" => {
-            let Some(sel) = explicit_account(sub_m, "account").or_else(|| opt_str(m, "use_account")) else {
+            let Some(sel) =
+                explicit_account(sub_m, "account").or_else(|| opt_str(m, "use_account"))
+            else {
                 return ctx.fail_usage(
                     "account show",
                     "--use-account=<slot|alias|email> or ACCOUNT argument is required",
@@ -843,7 +1000,10 @@ pub fn cmd_account(ctx: &AppContext, m: &ArgMatches) -> i32 {
         }
         "migrate" => {
             if !opt_flag(sub_m, "force") && !opt_flag(m, "force") {
-                return ctx.fail("account migrate", "migration updates token storage; rerun with --force");
+                return ctx.fail(
+                    "account migrate",
+                    "migration updates token storage; rerun with --force",
+                );
             }
             let count = match ctx.vault.migrate_legacy(&mut accounts) {
                 Ok(c) => c,
@@ -859,7 +1019,9 @@ pub fn cmd_account(ctx: &AppContext, m: &ArgMatches) -> i32 {
             0
         }
         "enable" | "disable" => {
-            let Some(sel) = explicit_account(sub_m, "account").or_else(|| opt_str(m, "use_account")) else {
+            let Some(sel) =
+                explicit_account(sub_m, "account").or_else(|| opt_str(m, "use_account"))
+            else {
                 return ctx.fail_usage(
                     "account",
                     "--use-account=<slot|alias|email> or ACCOUNT argument is required",
@@ -876,9 +1038,15 @@ pub fn cmd_account(ctx: &AppContext, m: &ArgMatches) -> i32 {
                 return ctx.fail("account", err);
             }
             if ctx.json {
-                return ctx.ok_json(&format!("account {sub}"), json!({"email": email, "disabled": disable}));
+                return ctx.ok_json(
+                    &format!("account {sub}"),
+                    json!({"email": email, "disabled": disable}),
+                );
             }
-            println!("Account {email} {}.", if disable { "disabled" } else { "enabled" });
+            println!(
+                "Account {email} {}.",
+                if disable { "disabled" } else { "enabled" }
+            );
             0
         }
         _ => ctx.fail("account", format!("unknown subcommand {sub:?}")),

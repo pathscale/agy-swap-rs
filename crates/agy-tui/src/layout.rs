@@ -42,11 +42,20 @@ impl Rect {
     pub const fn inner(self, pad_x: u16, pad_y: u16) -> Self {
         let dx = pad_x.saturating_mul(2);
         let dy = pad_y.saturating_mul(2);
-        let nx = self.x.saturating_add(if pad_x < self.w { pad_x } else { self.w });
-        let ny = self.y.saturating_add(if pad_y < self.h { pad_y } else { self.h });
+        let nx = self
+            .x
+            .saturating_add(if pad_x < self.w { pad_x } else { self.w });
+        let ny = self
+            .y
+            .saturating_add(if pad_y < self.h { pad_y } else { self.h });
         let nw = self.w.saturating_sub(dx);
         let nh = self.h.saturating_sub(dy);
-        Self { x: nx, y: ny, w: nw, h: nh }
+        Self {
+            x: nx,
+            y: ny,
+            w: nw,
+            h: nh,
+        }
     }
 
     #[must_use]
@@ -60,9 +69,19 @@ impl Rect {
         let b2 = other.bottom();
         let y2 = if b1 < b2 { b1 } else { b2 };
         if x2 <= x1 || y2 <= y1 {
-            Self { x: x1, y: y1, w: 0, h: 0 }
+            Self {
+                x: x1,
+                y: y1,
+                w: 0,
+                h: 0,
+            }
         } else {
-            Self { x: x1, y: y1, w: x2 - x1, h: y2 - y1 }
+            Self {
+                x: x1,
+                y: y1,
+                w: x2 - x1,
+                h: y2 - y1,
+            }
         }
     }
 }
@@ -156,7 +175,9 @@ fn solve_1d(origin: u16, total: u16, constraints: &[Constraint], gap: u16) -> Ve
             for (i, c) in constraints.iter().copied().enumerate() {
                 if let Constraint::Fill(w) = c {
                     if w > 0 {
-                        let share = (pool * (w as u32)) / fill_weight_sum;
+                        let share = (pool * (w as u32))
+                            .checked_div(fill_weight_sum)
+                            .unwrap_or(0);
                         sizes[i] += share;
                         distributed += share;
                     }
@@ -174,8 +195,7 @@ fn solve_1d(origin: u16, total: u16, constraints: &[Constraint], gap: u16) -> Ve
                     }
                 }
             }
-        } else if fill_zero_count > 0 {
-            let each = rem / fill_zero_count;
+        } else if let Some(each) = rem.checked_div(fill_zero_count) {
             let mut leftover = rem % fill_zero_count;
             for (i, c) in constraints.iter().copied().enumerate() {
                 if matches!(c, Constraint::Fill(0)) {
@@ -186,8 +206,7 @@ fn solve_1d(origin: u16, total: u16, constraints: &[Constraint], gap: u16) -> Ve
                     }
                 }
             }
-        } else if min_count > 0 {
-            let each = rem / min_count;
+        } else if let Some(each) = rem.checked_div(min_count) {
             let mut leftover = rem % min_count;
             for (i, c) in constraints.iter().copied().enumerate() {
                 if matches!(c, Constraint::Min(_)) {

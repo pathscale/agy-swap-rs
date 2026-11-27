@@ -51,7 +51,9 @@ impl TokenBundle {
     /// Parse either a `go-keyring-base64:...` string or raw JSON (nested `{"token": ...}` or flat).
     pub fn parse(raw: &str) -> Result<Self> {
         if raw.len() > MAX_TOKEN_BYTES {
-            return Err(Error::InvalidInput("token exceeds maximum size limit".to_string()));
+            return Err(Error::InvalidInput(
+                "token exceeds maximum size limit".to_string(),
+            ));
         }
         let mut envelope = decode_token_envelope(raw)?;
         let has_auth_method = envelope
@@ -108,7 +110,10 @@ impl TokenBundle {
     /// Encode the normalized token JSON with the `go-keyring-base64:` prefix.
     #[must_use]
     pub fn to_keyring_string(&self) -> String {
-        format!("{KEYRING_PREFIX}{}", base64_encode_std(self.raw_json.as_bytes()))
+        format!(
+            "{KEYRING_PREFIX}{}",
+            base64_encode_std(self.raw_json.as_bytes())
+        )
     }
 
     /// Render flat `oauth_creds.json` representation used by Gemini and Antigravity surfaces.
@@ -120,7 +125,10 @@ impl TokenBundle {
             .or_else(|| parsed.as_object())
             .ok_or_else(|| Error::InvalidInput("invalid token JSON object".to_string()))?;
         let mut creds = Map::new();
-        creds.insert("access_token".to_string(), Value::String(self.access_token.clone()));
+        creds.insert(
+            "access_token".to_string(),
+            Value::String(self.access_token.clone()),
+        );
         creds.insert(
             "refresh_token".to_string(),
             Value::String(self.refresh_token.clone().unwrap_or_default()),
@@ -132,7 +140,10 @@ impl TokenBundle {
         let token_type = get_str(inner, "token_type")
             .filter(|s| !s.trim().is_empty())
             .unwrap_or("Bearer");
-        creds.insert("token_type".to_string(), Value::String(token_type.to_string()));
+        creds.insert(
+            "token_type".to_string(),
+            Value::String(token_type.to_string()),
+        );
         creds.insert(
             "id_token".to_string(),
             Value::String(get_str(inner, "id_token").unwrap_or("").to_string()),
@@ -415,12 +426,16 @@ fn match_query_secret_param(rest: &str, prev_byte: Option<u8>) -> Option<(usize,
     ];
     let bytes = rest.as_bytes();
     for param in PARAMS {
-        if bytes.len() > param.len() && bytes[..param.len()].eq_ignore_ascii_case(param.as_bytes()) {
+        if bytes.len() > param.len() && bytes[..param.len()].eq_ignore_ascii_case(param.as_bytes())
+        {
             let start = param.len();
             let mut end = start;
             while end < bytes.len()
                 && !bytes[end].is_ascii_whitespace()
-                && !matches!(bytes[end], b'&' | b'"' | b'\'' | b'#' | b'>' | b')' | b']' | b'}')
+                && !matches!(
+                    bytes[end],
+                    b'&' | b'"' | b'\'' | b'#' | b'>' | b')' | b']' | b'}'
+                )
             {
                 end += 1;
             }
@@ -561,9 +576,7 @@ fn scan_chunk_for_oauth_params(buf: &[u8], ids: &mut Vec<String>, secrets: &mut 
             }
             let d_len = d_end - i;
             let rest_needed = 1 + 32 + ID_SUFFIX.len();
-            if (10..=15).contains(&d_len)
-                && d_end + rest_needed <= buf.len()
-                && buf[d_end] == b'-'
+            if (10..=15).contains(&d_len) && d_end + rest_needed <= buf.len() && buf[d_end] == b'-'
             {
                 let slug = &buf[d_end + 1..d_end + 33];
                 let suf = &buf[d_end + 33..d_end + rest_needed];
@@ -606,10 +619,7 @@ fn discover_installed_agy_oauth_clients() -> (Vec<String>, Vec<String>) {
     const OVERLAP: usize = 128;
     let mut window = vec![0u8; OVERLAP + CHUNK];
     let mut carry = 0usize;
-    loop {
-        let Ok(n) = file.read(&mut window[carry..carry + CHUNK]) else {
-            break;
-        };
+    while let Ok(n) = file.read(&mut window[carry..carry + CHUNK]) {
         if n == 0 {
             break;
         }
@@ -773,7 +783,10 @@ pub fn refresh_access_token(http: &HttpClient, raw_token: &str) -> Result<TokenB
             });
         }
         if resp.status == 400 || resp.status == 401 {
-            return Err(Error::Auth(format!("OAuth refresh failed (HTTP {})", resp.status)));
+            return Err(Error::Auth(format!(
+                "OAuth refresh failed (HTTP {})",
+                resp.status
+            )));
         }
         return Err(Error::Network(format!(
             "OAuth refresh failed (HTTP {})",
@@ -784,7 +797,9 @@ pub fn refresh_access_token(http: &HttpClient, raw_token: &str) -> Result<TokenB
         .json()
         .map_err(|_| Error::Auth("OAuth refresh returned invalid JSON".to_string()))?;
     let Some(result_obj) = body.as_object() else {
-        return Err(Error::Auth("OAuth refresh returned non-object JSON".to_string()));
+        return Err(Error::Auth(
+            "OAuth refresh returned non-object JSON".to_string(),
+        ));
     };
     let new_access = get_str(result_obj, "access_token")
         .map(str::trim)
@@ -794,16 +809,25 @@ pub fn refresh_access_token(http: &HttpClient, raw_token: &str) -> Result<TokenB
         .get_mut("token")
         .and_then(Value::as_object_mut)
         .ok_or_else(|| Error::InvalidInput("invalid OAuth token envelope".to_string()))?;
-    inner.insert("access_token".to_string(), Value::String(new_access.to_string()));
+    inner.insert(
+        "access_token".to_string(),
+        Value::String(new_access.to_string()),
+    );
     for key in ["refresh_token", "id_token", "scope", "token_type"] {
-        if let Some(val) = get_str(result_obj, key).map(str::trim).filter(|s| !s.is_empty()) {
+        if let Some(val) = get_str(result_obj, key)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
             inner.insert(key.to_string(), Value::String(val.to_string()));
         }
     }
     if let Some(secs) = value_f64(result_obj.get("expires_in")) {
         if secs > 0.0 && secs <= (365.0 * 86_400.0) {
             let expiry_unix = wall_unix_secs().saturating_add(secs as i64);
-            inner.insert("expiry".to_string(), Value::String(format_rfc3339_utc(expiry_unix)));
+            inner.insert(
+                "expiry".to_string(),
+                Value::String(format_rfc3339_utc(expiry_unix)),
+            );
             inner.insert(
                 "expiry_date".to_string(),
                 Value::from(expiry_unix.saturating_mul(1000)),
@@ -863,13 +887,17 @@ pub fn fetch_verified_email(http: &HttpClient, access_token: &str) -> Result<(St
         .json()
         .map_err(|_| Error::Auth("Google userinfo returned invalid JSON".to_string()))?;
     let Some(obj) = info.as_object() else {
-        return Err(Error::Auth("Google userinfo returned non-object JSON".to_string()));
+        return Err(Error::Auth(
+            "Google userinfo returned non-object JSON".to_string(),
+        ));
     };
     let verified = obj.get("email_verified").and_then(Value::as_bool) == Some(true)
         || obj.get("verified_email").and_then(Value::as_bool) == Some(true);
     let email = get_str(obj, "email")
         .and_then(normalize_email)
-        .ok_or_else(|| Error::Auth("Google userinfo returned no valid account email".to_string()))?;
+        .ok_or_else(|| {
+            Error::Auth("Google userinfo returned no valid account email".to_string())
+        })?;
     if !verified {
         return Err(Error::Auth(
             "Google userinfo reported an unverified account email".to_string(),
@@ -1117,7 +1145,13 @@ pub fn login_via_isolated_agy_tty(paths: &Paths) -> Result<TokenBundle> {
     if !paths.gemini_dir.trim().is_empty() {
         let staging_cfg = join_path(&staging_gemini, "config");
         let _ = ensure_private_dir(&staging_cfg);
-        for cfg_file in [".migrated", "GEMINI.md", "hooks.json", "ban-python-hook.ts", "mcp_config.json"] {
+        for cfg_file in [
+            ".migrated",
+            "GEMINI.md",
+            "hooks.json",
+            "ban-python-hook.ts",
+            "mcp_config.json",
+        ] {
             let src = join_path(&paths.gemini_dir, &format!("config/{cfg_file}"));
             let dst = join_path(&staging_cfg, cfg_file);
             if let Ok(bytes) = eko::file::read(&src) {
@@ -1224,7 +1258,9 @@ fn try_open_browser(url: &str) {
     let opener = "open";
     #[cfg(not(target_os = "macos"))]
     let opener = "xdg-open";
-    let _ = eko::command::Command::new(opener).arg(url.as_bytes()).spawn();
+    let _ = eko::command::Command::new(opener)
+        .arg(url.as_bytes())
+        .spawn();
 }
 
 /// Perform an OAuth 2.0 Authorization Code + S256 PKCE loopback login flow.
@@ -1302,7 +1338,9 @@ pub fn login_via_pkce_loopback_with_timeout(
             let _ = stream.write_all(
                 b"HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain; charset=utf-8\r\nConnection: close\r\n\r\nAuthentication cancelled.\n",
             );
-            return Err(Error::Auth(format!("OAuth authorization failed - {err_code}")));
+            return Err(Error::Auth(format!(
+                "OAuth authorization failed - {err_code}"
+            )));
         }
         let state_got = parse_query_param(query, "state").unwrap_or_default();
         let Some(code_got) = parse_query_param(query, "code").filter(|s| !s.is_empty()) else {
@@ -1325,7 +1363,9 @@ pub fn login_via_pkce_loopback_with_timeout(
         break;
     }
     let code = auth_code.ok_or_else(|| {
-        Error::Auth(format!("timed out waiting for OAuth callback ({timeout_secs}s)"))
+        Error::Auth(format!(
+            "timed out waiting for OAuth callback ({timeout_secs}s)"
+        ))
     })?;
     let form = [
         ("client_id", client_id.as_str()),
@@ -1346,12 +1386,17 @@ pub fn login_via_pkce_loopback_with_timeout(
         .json()
         .map_err(|_| Error::Auth("OAuth code exchange returned invalid JSON".to_string()))?;
     let Some(mut obj) = exchanged.as_object().cloned() else {
-        return Err(Error::Auth("OAuth code exchange returned non-object JSON".to_string()));
+        return Err(Error::Auth(
+            "OAuth code exchange returned non-object JSON".to_string(),
+        ));
     };
     if let Some(secs) = value_f64(obj.get("expires_in")) {
         if secs > 0.0 && secs <= (365.0 * 86_400.0) {
             let expiry_unix = wall_unix_secs().saturating_add(secs as i64);
-            obj.insert("expiry".to_string(), Value::String(format_rfc3339_utc(expiry_unix)));
+            obj.insert(
+                "expiry".to_string(),
+                Value::String(format_rfc3339_utc(expiry_unix)),
+            );
             obj.insert(
                 "expiry_date".to_string(),
                 Value::from(expiry_unix.saturating_mul(1000)),

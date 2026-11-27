@@ -95,7 +95,11 @@ impl ModelFamily {
             Some(Self::Argon)
         } else if lower.contains("gemini") || lower.contains("flash") {
             Some(Self::Gemini)
-        } else if lower.contains("claude") || lower.contains("anthropic") || lower.contains("sonnet") || lower.contains("opus") {
+        } else if lower.contains("claude")
+            || lower.contains("anthropic")
+            || lower.contains("sonnet")
+            || lower.contains("opus")
+        {
             Some(Self::Claude)
         } else if lower.contains("gpt") || lower.contains("openai") {
             Some(Self::Gpt)
@@ -173,7 +177,10 @@ pub struct PoolWindow {
 
 impl PoolWindow {
     pub const fn new(remaining_pct: Option<f64>, reset_at_unix: Option<i64>) -> Self {
-        Self { remaining_pct, reset_at_unix }
+        Self {
+            remaining_pct,
+            reset_at_unix,
+        }
     }
 
     pub fn is_known(&self) -> bool {
@@ -262,9 +269,8 @@ impl QuotaSnapshot {
         let lower = name.trim().to_ascii_lowercase();
         match lower.as_str() {
             "gemini" => Some(&self.gemini),
-            "claude_gpt" | "claude-gpt" | "claude/gpt" | "claude" | "gpt" | "third-party" | "other" => {
-                Some(&self.claude_gpt)
-            }
+            "claude_gpt" | "claude-gpt" | "claude/gpt" | "claude" | "gpt" | "third-party"
+            | "other" => Some(&self.claude_gpt),
             "argon" | "gemini-4-argon" | "gemini 4 argon" => self.argon.as_ref(),
             _ => self
                 .extra_pools
@@ -326,7 +332,8 @@ fn default_account_name() -> String {
 impl Account {
     pub fn new(email: impl Into<String>, name: impl Into<String>) -> Self {
         let raw_email = email.into();
-        let email = normalize_email(&raw_email).unwrap_or_else(|| raw_email.trim().to_ascii_lowercase());
+        let email =
+            normalize_email(&raw_email).unwrap_or_else(|| raw_email.trim().to_ascii_lowercase());
         let cleaned_name = clean_text(&name.into());
         let name = if cleaned_name.is_empty() {
             default_account_name()
@@ -368,7 +375,11 @@ impl Account {
                     return true;
                 }
                 if matches!(fam, ModelFamily::Claude | ModelFamily::Gpt)
-                    && (active_key("claude") || active_key("gpt") || active_key("claude_gpt") || active_key("claude-gpt") || active_key("other"))
+                    && (active_key("claude")
+                        || active_key("gpt")
+                        || active_key("claude_gpt")
+                        || active_key("claude-gpt")
+                        || active_key("other"))
                 {
                     return true;
                 }
@@ -398,7 +409,12 @@ impl Account {
                     .argon
                     .as_ref()
                     .and_then(PoolQuota::effective_pct)
-                    .or_else(|| q.extra_pools.iter().filter_map(PoolQuota::effective_pct).reduce(f64::min)),
+                    .or_else(|| {
+                        q.extra_pools
+                            .iter()
+                            .filter_map(PoolQuota::effective_pct)
+                            .reduce(f64::min)
+                    }),
             },
         }
     }
@@ -605,7 +621,11 @@ impl Accounts {
         name_hit
     }
 
-    pub fn resolve_with_settings<'a>(&'a self, selector: &str, settings: &Settings) -> Option<&'a str> {
+    pub fn resolve_with_settings<'a>(
+        &'a self,
+        selector: &str,
+        settings: &Settings,
+    ) -> Option<&'a str> {
         let mut cur = selector.trim();
         if cur.is_empty() {
             return None;
@@ -662,13 +682,17 @@ fn convert_go_quota_snapshot(raw: &serde_json::Value) -> Option<QuotaSnapshot> {
     snap.plan_tier = plan_tier;
     if let Some(groups) = obj.get("groups").and_then(|g| g.as_array()) {
         for grp in groups {
-            let Some(gobj) = grp.as_object() else { continue };
+            let Some(gobj) = grp.as_object() else {
+                continue;
+            };
             let gid = gobj.get("id").and_then(|v| v.as_str()).unwrap_or("");
             let gname = gobj.get("name").and_then(|v| v.as_str()).unwrap_or(gid);
             let mut pool = PoolQuota::new(clean_text(gname));
             if let Some(buckets) = gobj.get("buckets").and_then(|b| b.as_array()) {
                 for bkt in buckets {
-                    let Some(bobj) = bkt.as_object() else { continue };
+                    let Some(bobj) = bkt.as_object() else {
+                        continue;
+                    };
                     let win = bobj.get("window").and_then(|v| v.as_str()).unwrap_or("");
                     let pct = bobj
                         .get("remaining_fraction")
@@ -706,7 +730,10 @@ fn convert_go_quota_snapshot(raw: &serde_json::Value) -> Option<QuotaSnapshot> {
     Some(snap)
 }
 
-fn upgrade_account_from_value(key: &str, raw: serde_json::Value) -> core::result::Result<Account, String> {
+fn upgrade_account_from_value(
+    key: &str,
+    raw: serde_json::Value,
+) -> core::result::Result<Account, String> {
     let obj = raw
         .as_object()
         .ok_or_else(|| "accounts.json entry must be an object".to_string())?;
@@ -716,8 +743,8 @@ fn upgrade_account_from_value(key: &str, raw: serde_json::Value) -> core::result
     } else {
         acc.email.as_str()
     };
-    let email = normalize_email(raw_email)
-        .ok_or_else(|| format!("invalid account email: {raw_email}"))?;
+    let email =
+        normalize_email(raw_email).ok_or_else(|| format!("invalid account email: {raw_email}"))?;
     acc.email = email;
     let cleaned_name = clean_text(&acc.name);
     acc.name = if cleaned_name.is_empty() {
@@ -728,7 +755,11 @@ fn upgrade_account_from_value(key: &str, raw: serde_json::Value) -> core::result
     if acc.verify_url.is_none() {
         if let Some(elig) = obj.get("eligibility").and_then(|v| v.as_object()) {
             if elig.get("state").and_then(|v| v.as_str()) == Some("verify_required") {
-                let url = elig.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let url = elig
+                    .get("url")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
                 acc.verify_url = Some(url);
             }
         }
@@ -786,7 +817,10 @@ impl<'de> Visitor<'de> for AccountsVisitor {
         f.write_str("an ordered map of email to account records")
     }
 
-    fn visit_map<M: MapAccess<'de>>(self, mut access: M) -> core::result::Result<Accounts, M::Error> {
+    fn visit_map<M: MapAccess<'de>>(
+        self,
+        mut access: M,
+    ) -> core::result::Result<Accounts, M::Error> {
         let mut accounts = Accounts::new();
         while let Some((key, val)) = access.next_entry::<String, serde_json::Value>()? {
             let acc = upgrade_account_from_value(&key, val).map_err(de::Error::custom)?;

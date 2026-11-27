@@ -3,6 +3,7 @@
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
+use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;
 use core::net::{IpAddr, Ipv4Addr, Ipv6Addr};
@@ -116,7 +117,11 @@ impl HttpClient {
 
     pub fn clock_skew_secs(&self) -> i64 {
         let skew = self.clock_skew.load(Ordering::Relaxed);
-        if skew.abs() < CLOCK_SKEW_FLOOR_SECS { 0 } else { skew }
+        if skew.abs() < CLOCK_SKEW_FLOOR_SECS {
+            0
+        } else {
+            skew
+        }
     }
 
     pub fn user_agent(&self) -> &str {
@@ -187,15 +192,34 @@ impl HttpClient {
                 if let Ok(parsed) = ParsedUrl::parse(url) {
                     if self.has_custom_ca && parsed.tls && matches!(err, nago_http::Error::Tls(_)) {
                         if let Ok(target) = nago_http::Target::resolve(parsed.host, parsed.port) {
-                            if let Ok(resp) = self.send_to_target(method, &parsed, &target, &filtered, body, &self.default_tls) {
+                            if let Ok(resp) = self.send_to_target(
+                                method,
+                                &parsed,
+                                &target,
+                                &filtered,
+                                body,
+                                &self.default_tls,
+                            ) {
                                 return self.finish_response(resp);
                             }
                         }
                     }
                     if should_retry_via_doh(&parsed, &err) {
                         if let Ok(ips) = self.resolve_via_doh(parsed.host) {
-                            if let Ok(target) = nago_http::Target::pinned(parsed.host, parsed.port, &ips, parsed.tls) {
-                                if let Ok(resp) = self.send_to_target(method, &parsed, &target, &filtered, body, &self.tls_config) {
+                            if let Ok(target) = nago_http::Target::pinned(
+                                parsed.host,
+                                parsed.port,
+                                &ips,
+                                parsed.tls,
+                            ) {
+                                if let Ok(resp) = self.send_to_target(
+                                    method,
+                                    &parsed,
+                                    &target,
+                                    &filtered,
+                                    body,
+                                    &self.tls_config,
+                                ) {
                                     return self.finish_response(resp);
                                 }
                             }
@@ -235,7 +259,10 @@ impl HttpClient {
         match outcome {
             Ok(Ok(resp)) => Ok(resp),
             Ok(Err(e)) => Err(Error::Network(e.to_string())),
-            Err(_) => Err(Error::Network(format!("request to {} timed out", parsed.host))),
+            Err(_) => Err(Error::Network(format!(
+                "request to {} timed out",
+                parsed.host
+            ))),
         }
     }
 
@@ -243,7 +270,8 @@ impl HttpClient {
         if let Some(date_hdr) = resp.header("Date") {
             if let Some(server_unix) = parse_http_date_unix(date_hdr) {
                 let local_unix = eko::time::epoch_secs();
-                self.clock_skew.store(server_unix - local_unix, Ordering::Relaxed);
+                self.clock_skew
+                    .store(server_unix - local_unix, Ordering::Relaxed);
             }
         }
         Ok(HttpResponse {
@@ -284,7 +312,9 @@ impl HttpClient {
                 }
             }
         }
-        Err(Error::Network(format!("DoH lookup returned no public addresses for {host}")))
+        Err(Error::Network(format!(
+            "DoH lookup returned no public addresses for {host}"
+        )))
     }
 }
 
@@ -307,7 +337,9 @@ fn load_custom_ca_tls_config() -> Result<Option<Arc<nago_rustls::rustls::ClientC
     let pem_bytes = eko::file::read(&path)?;
     let certs = parse_pem_certificates(&pem_bytes);
     if certs.is_empty() {
-        return Err(Error::Crypto(format!("no valid PEM certificates in {path}")));
+        return Err(Error::Crypto(format!(
+            "no valid PEM certificates in {path}"
+        )));
     }
     let mut roots = nago_rustls::rustls::RootCertStore::empty();
     let mut added = 0usize;
@@ -317,7 +349,9 @@ fn load_custom_ca_tls_config() -> Result<Option<Arc<nago_rustls::rustls::ClientC
         }
     }
     if added == 0 {
-        return Err(Error::Crypto(format!("no usable root certificates in {path}")));
+        return Err(Error::Crypto(format!(
+            "no usable root certificates in {path}"
+        )));
     }
     let cfg = nago_rustls::rustls::ClientConfig::builder_with_details(
         Arc::new(ps_rustcrypto::provider_with_rsa_pss()),
@@ -383,7 +417,7 @@ impl<'a> ParsedUrl<'a> {
         let path_and_query = if tail.is_empty() {
             "/"
         } else if tail.starts_with('?') {
-            return Err(())
+            return Err(());
         } else {
             tail
         };
@@ -441,10 +475,10 @@ fn doh_endpoints() -> Vec<String> {
                 .collect();
         }
     }
-    let mut out = Vec::with_capacity(2);
-    out.push("https://1.1.1.1/dns-query".to_string());
-    out.push("https://8.8.8.8/resolve".to_string());
-    out
+    vec![
+        "https://1.1.1.1/dns-query".to_string(),
+        "https://8.8.8.8/resolve".to_string(),
+    ]
 }
 
 fn should_retry_via_doh(parsed: &ParsedUrl<'_>, err: &nago_http::Error) -> bool {
@@ -526,7 +560,9 @@ fn build_dns_wire_query(host: &str) -> Option<Vec<u8>> {
         return None;
     }
     let mut msg = Vec::with_capacity(64);
-    msg.extend_from_slice(&[0x00, 0x00, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+    msg.extend_from_slice(&[
+        0x00, 0x00, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    ]);
     for label in trimmed.split('.') {
         if label.is_empty() || label.len() > 63 {
             return None;
@@ -568,7 +604,9 @@ fn parse_dns_wire_answers(packet: &[u8]) -> Vec<IpAddr> {
     let ancount = u16::from_be_bytes([packet[6], packet[7]]) as usize;
     let mut pos = 12usize;
     for _ in 0..qdcount {
-        let Some(next) = skip_dns_name(packet, pos) else { return Vec::new() };
+        let Some(next) = skip_dns_name(packet, pos) else {
+            return Vec::new();
+        };
         if next + 4 > packet.len() {
             return Vec::new();
         }
@@ -576,7 +614,9 @@ fn parse_dns_wire_answers(packet: &[u8]) -> Vec<IpAddr> {
     }
     let mut out = Vec::new();
     for _ in 0..ancount {
-        let Some(next) = skip_dns_name(packet, pos) else { break };
+        let Some(next) = skip_dns_name(packet, pos) else {
+            break;
+        };
         if next + 10 > packet.len() {
             break;
         }
@@ -584,7 +624,9 @@ fn parse_dns_wire_answers(packet: &[u8]) -> Vec<IpAddr> {
         let rclass = u16::from_be_bytes([packet[next + 2], packet[next + 3]]);
         let rdlen = u16::from_be_bytes([packet[next + 8], packet[next + 9]]) as usize;
         let rdata_start = next + 10;
-        let Some(rdata_end) = rdata_start.checked_add(rdlen) else { break };
+        let Some(rdata_end) = rdata_start.checked_add(rdlen) else {
+            break;
+        };
         if rdata_end > packet.len() {
             break;
         }
@@ -807,11 +849,19 @@ fn civil_from_days(days: i64) -> (i32, u32, u32) {
 }
 
 pub(crate) fn base64_encode_std(input: &[u8]) -> String {
-    base64_encode_with(input, b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", true)
+    base64_encode_with(
+        input,
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
+        true,
+    )
 }
 
 pub(crate) fn base64_encode_url_nopad(input: &[u8]) -> String {
-    base64_encode_with(input, b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_", false)
+    base64_encode_with(
+        input,
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_",
+        false,
+    )
 }
 
 fn base64_encode_with(input: &[u8], alphabet: &[u8; 64], pad: bool) -> String {

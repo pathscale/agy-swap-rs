@@ -65,14 +65,28 @@ impl ActiveView {
 
     pub const fn subtitle(self) -> &'static str {
         match self {
-            ActiveView::Dashboard => "Live multi-account routing, quota telemetry, and instant session switch.",
-            ActiveView::Profiles => "Named routing profiles with family preference and reserve accounts.",
-            ActiveView::History => "Local audit trail of session switches, rotations, and refreshes.",
+            ActiveView::Dashboard => {
+                "Live multi-account routing, quota telemetry, and instant session switch."
+            }
+            ActiveView::Profiles => {
+                "Named routing profiles with family preference and reserve accounts."
+            }
+            ActiveView::History => {
+                "Local audit trail of session switches, rotations, and refreshes."
+            }
             ActiveView::Settings => "Switch mode, ranking policy, directory bindings, and aliases.",
-            ActiveView::Doctor => "Read-only diagnostics across storage, vault, session, and CLI paths.",
-            ActiveView::Backup => "Metadata-only export or AES-256-GCM + PBKDF2 encrypted vault bundles.",
-            ActiveView::QuotaPools => "All cached model pools and reset windows on the selected account.",
-            ActiveView::FailoverPolicy => "Select ANY or ALL checked pools that trigger automatic rotation.",
+            ActiveView::Doctor => {
+                "Read-only diagnostics across storage, vault, session, and CLI paths."
+            }
+            ActiveView::Backup => {
+                "Metadata-only export or AES-256-GCM + PBKDF2 encrypted vault bundles."
+            }
+            ActiveView::QuotaPools => {
+                "All cached model pools and reset windows on the selected account."
+            }
+            ActiveView::FailoverPolicy => {
+                "Select ANY or ALL checked pools that trigger automatic rotation."
+            }
         }
     }
 
@@ -661,7 +675,12 @@ pub(crate) fn default_pool_policy() -> PoolFailoverPolicy {
 }
 
 fn extract_pool_policy(val: &serde_json::Value) -> PoolFailoverPolicy {
-    for key in ["pool_failover", "pool_failover_policy", "failover_policy", "quota_policy"] {
+    for key in [
+        "pool_failover",
+        "pool_failover_policy",
+        "failover_policy",
+        "quota_policy",
+    ] {
         if let Some(sub) = val.get(key) {
             if let Ok(parsed) = serde_json::from_value::<PoolFailoverPolicy>(sub.clone()) {
                 return parsed;
@@ -682,8 +701,10 @@ fn extract_switch_mode(val: &serde_json::Value) -> SwitchMode {
             }
         }
     }
-    if let Some(allow) =
-        val.get("policy").and_then(|p| p.get("allow_apply")).and_then(|v| v.as_bool())
+    if let Some(allow) = val
+        .get("policy")
+        .and_then(|p| p.get("allow_apply"))
+        .and_then(|v| v.as_bool())
     {
         if allow {
             return SwitchMode::Auto;
@@ -873,10 +894,18 @@ impl DeckState {
     }
 
     pub fn has_token(&self, account: &Account) -> bool {
-        if account.legacy_token_data.as_deref().map(|s| !s.is_empty()).unwrap_or(false) {
+        if account
+            .legacy_token_data
+            .as_deref()
+            .map(|s| !s.is_empty())
+            .unwrap_or(false)
+        {
             return true;
         }
-        self.token_present.get(&account.email).copied().unwrap_or(false)
+        self.token_present
+            .get(&account.email)
+            .copied()
+            .unwrap_or(false)
     }
 
     pub fn isolated_count(&self, email: &str) -> usize {
@@ -1128,13 +1157,28 @@ impl DeckState {
                 SwitchMode::Auto => "auto",
                 SwitchMode::Manual => "manual",
             };
-            obj.insert("switch_mode".to_string(), serde_json::Value::String(mode_str.to_string()));
+            obj.insert(
+                "switch_mode".to_string(),
+                serde_json::Value::String(mode_str.to_string()),
+            );
             if let Some(ui) = obj.get_mut("ui").and_then(|v| v.as_object_mut()) {
-                ui.insert("split_offset".to_string(), serde_json::Value::from(self.split_offset));
-                ui.insert("stack_offset".to_string(), serde_json::Value::from(self.stack_offset));
+                ui.insert(
+                    "split_offset".to_string(),
+                    serde_json::Value::from(self.split_offset),
+                );
+                ui.insert(
+                    "stack_offset".to_string(),
+                    serde_json::Value::from(self.stack_offset),
+                );
             } else {
-                obj.insert("split_offset".to_string(), serde_json::Value::from(self.split_offset));
-                obj.insert("stack_offset".to_string(), serde_json::Value::from(self.stack_offset));
+                obj.insert(
+                    "split_offset".to_string(),
+                    serde_json::Value::from(self.split_offset),
+                );
+                obj.insert(
+                    "stack_offset".to_string(),
+                    serde_json::Value::from(self.stack_offset),
+                );
             }
         }
         let parsed: agy_core::Settings =
@@ -1148,7 +1192,11 @@ impl DeckState {
     pub fn show_toast(&mut self, msg: impl Into<String>, level: ToastLevel, now_ms: u64) {
         let message = msg.into();
         self.status_line = Some((message.clone(), level));
-        self.toast = Some(Toast { message, level, expires_at_ms: now_ms.saturating_add(3_200) });
+        self.toast = Some(Toast {
+            message,
+            level,
+            expires_at_ms: now_ms.saturating_add(3_200),
+        });
     }
 
     pub fn expire_toast(&mut self, now_ms: u64) -> bool {

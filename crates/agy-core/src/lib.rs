@@ -15,6 +15,7 @@ use core::fmt;
 
 pub mod backup;
 pub mod http;
+pub mod image;
 pub mod isolate;
 pub mod logwatch;
 pub mod model;
@@ -30,8 +31,8 @@ pub mod vault;
 pub use backup::BackupBundle;
 pub use http::{HttpClient, HttpResponse};
 pub use isolate::{
-    active_isolated_sessions, harvest_overlay_home, prepare_account_overlay_home,
-    run_isolated_agy, spawn_interactive_tty, write_keyring_bypass_marker_2036,
+    active_isolated_sessions, harvest_overlay_home, prepare_account_overlay_home, run_isolated_agy,
+    spawn_interactive_tty, write_keyring_bypass_marker_2036,
 };
 pub use logwatch::{FailoverResult, SwitchRuntime, SwitchRuntimeState};
 pub use model::{
@@ -40,14 +41,14 @@ pub use model::{
 };
 pub use oauth::TokenBundle;
 pub use ops::{DoctorCheck, ForecastEntry};
-pub use paths::{Paths, SemVer, wall_unix_secs};
+pub use paths::{wall_unix_secs, Paths, SemVer};
 pub use policy::{
     BindMode, DirectoryBinding, PoolFailoverPolicy, PoolMatchMode, Profile, RankingPolicy,
     Recommendation, RouteDecision, RouteStrategy, SwitchMode,
 };
 pub use quota::QuotaService;
 pub use session::SessionManager;
-pub use store::{FileLock, Store, atomic_write_private};
+pub use store::{atomic_write_private, FileLock, Store};
 pub use vault::{Vault, VaultMode};
 
 pub const VERSION: &str = "0.1.0";

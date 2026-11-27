@@ -78,8 +78,7 @@ struct RestoreJournal {
 }
 
 const SHA256_H0: [u32; 8] = [
-    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
-    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
 ];
 
 const SHA256_K: [u32; 64] = [
@@ -475,8 +474,8 @@ fn ghash(h: u128, aad: &[u8], ciphertext: &[u8]) -> u128 {
 }
 
 fn inc32(counter: &mut [u8; 16]) {
-    let next = u32::from_be_bytes([counter[12], counter[13], counter[14], counter[15]])
-        .wrapping_add(1);
+    let next =
+        u32::from_be_bytes([counter[12], counter[13], counter[14], counter[15]]).wrapping_add(1);
     counter[12..16].copy_from_slice(&next.to_be_bytes());
 }
 
@@ -648,8 +647,7 @@ pub fn export_backup(
                 }
             }
         }
-        let plaintext =
-            serde_json::to_vec(&secrets_map).map_err(|e| Error::Json(e.to_string()))?;
+        let plaintext = serde_json::to_vec(&secrets_map).map_err(|e| Error::Json(e.to_string()))?;
         let mut salt = [0u8; 16];
         let mut nonce = [0u8; 12];
         fill_os_random(&mut salt)?;
@@ -701,8 +699,7 @@ pub fn export_backup_to_file(
     now_unix: i64,
 ) -> Result<BackupBundle> {
     let bundle = export_backup(store, vault, include_secrets, passphrase, now_unix)?;
-    let mut encoded =
-        serde_json::to_vec_pretty(&bundle).map_err(|e| Error::Json(e.to_string()))?;
+    let mut encoded = serde_json::to_vec_pretty(&bundle).map_err(|e| Error::Json(e.to_string()))?;
     encoded.push(b'\n');
     atomic_write_private(out_path, &encoded)?;
     Ok(bundle)
@@ -841,8 +838,7 @@ pub fn import_backup(
         settings_raw: read_optional_file(&paths.settings_file)?,
         vault_raw: read_optional_file(&paths.vault_file)?,
     };
-    let mut jbytes =
-        serde_json::to_vec_pretty(&journal).map_err(|e| Error::Json(e.to_string()))?;
+    let mut jbytes = serde_json::to_vec_pretty(&journal).map_err(|e| Error::Json(e.to_string()))?;
     jbytes.push(b'\n');
     atomic_write_private(&jpath, &jbytes)?;
 

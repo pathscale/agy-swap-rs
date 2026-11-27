@@ -15,11 +15,11 @@ use eko::file::File;
 use eko::path::Path;
 use serde_json::{Map, Value};
 
-use crate::model::{Account, normalize_email};
-use crate::oauth::{TokenBundle, resolve_agy_executable};
-use crate::paths::{Paths, clean_path_str, join_path, sha256_hex};
+use crate::model::{normalize_email, Account};
+use crate::oauth::{resolve_agy_executable, TokenBundle};
+use crate::paths::{clean_path_str, join_path, sha256_hex, Paths};
 use crate::policy::lookup_account_secret;
-use crate::store::{FileLock, Store, atomic_write_private, ensure_private_dir, stat_mtime_ns};
+use crate::store::{atomic_write_private, ensure_private_dir, stat_mtime_ns, FileLock, Store};
 use crate::vault::Vault;
 use crate::{Error, Result};
 
@@ -85,7 +85,9 @@ fn is_executable_regular(path: &str) -> bool {
 fn resolve_program_in_env(program: &str, env_overrides: &[(&str, &str)]) -> Result<String> {
     let trimmed = program.trim();
     if trimmed.is_empty() || trimmed.as_bytes().contains(&0) {
-        return Err(Error::InvalidInput("executable name must not be empty".to_string()));
+        return Err(Error::InvalidInput(
+            "executable name must not be empty".to_string(),
+        ));
     }
     if trimmed.contains('/') {
         if is_executable_regular(trimmed) {
@@ -111,18 +113,55 @@ fn resolve_program_in_env(program: &str, env_overrides: &[(&str, &str)]) -> Resu
             }
         }
     }
-    Err(Error::NotFound(format!("executable {trimmed:?} not found in PATH")))
+    Err(Error::NotFound(format!(
+        "executable {trimmed:?} not found in PATH"
+    )))
 }
 
 fn to_c_vec(s: &str) -> Result<Vec<u8>> {
     let bytes = s.as_bytes();
     if bytes.contains(&0) {
-        return Err(Error::InvalidInput("NUL byte in process argument or env".to_string()));
+        return Err(Error::InvalidInput(
+            "NUL byte in process argument or env".to_string(),
+        ));
     }
     let mut out = Vec::with_capacity(bytes.len() + 1);
     out.extend_from_slice(bytes);
     out.push(0);
     Ok(out)
+}
+
+fn build_merged_env(env_overrides: &[(&str, &str)]) -> Result<Vec<Vec<u8>>> {
+    let mut env_entries: Vec<Vec<u8>> = eko::env::environ();
+    for &(key, val) in env_overrides {
+        if key.is_empty()
+            || key.as_bytes().contains(&b'=')
+            || key.as_bytes().contains(&0)
+            || val.as_bytes().contains(&0)
+        {
+            return Err(Error::InvalidInput(
+                "invalid environment variable override".to_string(),
+            ));
+        }
+        let mut kv = Vec::with_capacity(key.len() + 1 + val.len());
+        kv.extend_from_slice(key.as_bytes());
+        kv.push(b'=');
+        let prefix_len = kv.len();
+        kv.extend_from_slice(val.as_bytes());
+        if let Some(slot) = env_entries.iter_mut().find(|existing| {
+            existing.len() >= prefix_len && existing[..prefix_len] == kv[..prefix_len]
+        }) {
+            *slot = kv;
+        } else {
+            env_entries.push(kv);
+        }
+    }
+    for entry in &mut env_entries {
+        if entry.last() != Some(&0) {
+            entry.push(0);
+        }
+    }
+    Ok(env_entries)
 }
 
 /// Spawn an interactive child process inheriting real TTY descriptors `0, 1, 2`.
@@ -158,36 +197,7 @@ pub fn spawn_interactive_tty(
     }
     sh_argv_ptrs.push(core::ptr::null());
 
-    let mut env_entries: Vec<Vec<u8>> = eko::env::environ();
-    for &(key, val) in env_overrides {
-        if key.is_empty()
-            || key.as_bytes().contains(&b'=')
-            || key.as_bytes().contains(&0)
-            || val.as_bytes().contains(&0)
-        {
-            return Err(Error::InvalidInput(
-                "invalid environment variable override".to_string(),
-            ));
-        }
-        let mut kv = Vec::with_capacity(key.len() + 1 + val.len());
-        kv.extend_from_slice(key.as_bytes());
-        kv.push(b'=');
-        let prefix_len = kv.len();
-        kv.extend_from_slice(val.as_bytes());
-        if let Some(slot) = env_entries
-            .iter_mut()
-            .find(|existing| existing.len() >= prefix_len && existing[..prefix_len] == kv[..prefix_len])
-        {
-            *slot = kv;
-        } else {
-            env_entries.push(kv);
-        }
-    }
-    for entry in &mut env_entries {
-        if entry.last() != Some(&0) {
-            entry.push(0);
-        }
-    }
+    let env_entries = build_merged_env(env_overrides)?;
     let mut env_ptrs: Vec<*const eko::libc::c_char> = Vec::with_capacity(env_entries.len() + 1);
     for entry in &env_entries {
         env_ptrs.push(entry.as_ptr().cast());
@@ -205,7 +215,152 @@ pub fn spawn_interactive_tty(
                     eko::libc::_exit(127);
                 }
             }
-            eko::libc::execve(prog_c.as_ptr().cast(), argv_ptrs.as_ptr(), env_ptrs.as_ptr());
+            eko::libc::execve(
+                prog_c.as_ptr().cast(),
+                argv_ptrs.as_ptr(),
+                env_ptrs.as_ptr(),
+            );
+            if eko::Errno::current().0 == ENOEXEC_ERRNO {
+                eko::libc::execve(
+                    sh_c.as_ptr().cast(),
+                    sh_argv_ptrs.as_ptr(),
+                    env_ptrs.as_ptr(),
+                );
+            }
+            eko::libc::_exit(127);
+        }
+    }
+
+    let mut status: eko::libc::c_int = 0;
+    loop {
+        let rc = unsafe { eko::libc::waitpid(pid, &mut status, 0) };
+        if rc < 0 {
+            let err = eko::Errno::current();
+            if err.interrupted() {
+                continue;
+            }
+            return Err(Error::Sys(err));
+        }
+        if rc == pid {
+            break;
+        }
+    }
+    if eko::libc::WIFEXITED(status) {
+        Ok(eko::libc::WEXITSTATUS(status))
+    } else {
+        Ok(128 + eko::libc::WTERMSIG(status))
+    }
+}
+
+fn spawn_captured(
+    program: &str,
+    args: &[String],
+    env_overrides: &[(&str, &str)],
+    cwd: &str,
+    stdout_path: &str,
+    stderr_path: &str,
+) -> Result<i32> {
+    let resolved = resolve_program_in_env(program, env_overrides)?;
+    let prog_c = to_c_vec(&resolved)?;
+    let sh_c = b"/bin/sh\0".to_vec();
+    let cwd_c = match Some(cwd.trim()).filter(|d| !d.is_empty()) {
+        Some(dir) => Some(to_c_vec(dir)?),
+        None => None,
+    };
+    let out_trimmed = stdout_path.trim();
+    let err_trimmed = stderr_path.trim();
+    if out_trimmed.is_empty() || err_trimmed.is_empty() {
+        return Err(Error::InvalidInput(
+            "stdout and stderr capture paths must not be empty".to_string(),
+        ));
+    }
+    let stdout_c = to_c_vec(out_trimmed)?;
+    let stderr_c = to_c_vec(err_trimmed)?;
+    let devnull_c = b"/dev/null\0";
+
+    let mut argv_c: Vec<Vec<u8>> = Vec::with_capacity(args.len() + 1);
+    argv_c.push(prog_c.clone());
+    for arg in args {
+        argv_c.push(to_c_vec(arg)?);
+    }
+    let mut argv_ptrs: Vec<*const eko::libc::c_char> = Vec::with_capacity(argv_c.len() + 1);
+    for entry in &argv_c {
+        argv_ptrs.push(entry.as_ptr().cast());
+    }
+    argv_ptrs.push(core::ptr::null());
+
+    let mut sh_argv_ptrs: Vec<*const eko::libc::c_char> = Vec::with_capacity(argv_c.len() + 2);
+    sh_argv_ptrs.push(sh_c.as_ptr().cast());
+    for entry in &argv_c {
+        sh_argv_ptrs.push(entry.as_ptr().cast());
+    }
+    sh_argv_ptrs.push(core::ptr::null());
+
+    let env_entries = build_merged_env(env_overrides)?;
+    let mut env_ptrs: Vec<*const eko::libc::c_char> = Vec::with_capacity(env_entries.len() + 1);
+    for entry in &env_entries {
+        env_ptrs.push(entry.as_ptr().cast());
+    }
+    env_ptrs.push(core::ptr::null());
+
+    let pid = unsafe { eko::libc::fork() };
+    if pid < 0 {
+        return Err(Error::Sys(eko::Errno::current()));
+    }
+    if pid == 0 {
+        unsafe {
+            if let Some(ref dir_c) = cwd_c {
+                if eko::libc::chdir(dir_c.as_ptr().cast()) != 0 {
+                    eko::libc::_exit(127);
+                }
+            }
+            let fd_in = eko::libc::open2(devnull_c.as_ptr().cast(), eko::libc::O_RDONLY);
+            if fd_in < 0 {
+                eko::libc::_exit(127);
+            }
+            if fd_in != 0 {
+                if eko::libc::dup2(fd_in, 0) < 0 {
+                    eko::libc::_exit(127);
+                }
+                let _ = eko::libc::close(fd_in);
+            }
+
+            let out_flags = eko::libc::O_WRONLY | eko::libc::O_CREAT | eko::libc::O_TRUNC;
+            let fd_out = eko::libc::open3(
+                stdout_c.as_ptr().cast(),
+                out_flags,
+                0o600 as eko::libc::mode_t,
+            );
+            if fd_out < 0 {
+                eko::libc::_exit(127);
+            }
+            if fd_out != 1 {
+                if eko::libc::dup2(fd_out, 1) < 0 {
+                    eko::libc::_exit(127);
+                }
+                let _ = eko::libc::close(fd_out);
+            }
+
+            let fd_err = eko::libc::open3(
+                stderr_c.as_ptr().cast(),
+                out_flags,
+                0o600 as eko::libc::mode_t,
+            );
+            if fd_err < 0 {
+                eko::libc::_exit(127);
+            }
+            if fd_err != 2 {
+                if eko::libc::dup2(fd_err, 2) < 0 {
+                    eko::libc::_exit(127);
+                }
+                let _ = eko::libc::close(fd_err);
+            }
+
+            eko::libc::execve(
+                prog_c.as_ptr().cast(),
+                argv_ptrs.as_ptr(),
+                env_ptrs.as_ptr(),
+            );
             if eko::Errno::current().0 == ENOEXEC_ERRNO {
                 eko::libc::execve(
                     sh_c.as_ptr().cast(),
@@ -264,7 +419,9 @@ fn write_single_bypass_marker_2036(base_dir: &str) -> Result<()> {
 pub fn write_keyring_bypass_marker_2036(gemini_or_cli_dir: &str) -> Result<()> {
     let clean = clean_path_str(gemini_or_cli_dir);
     if clean.is_empty() {
-        return Err(Error::InvalidInput("marker base directory is empty".to_string()));
+        return Err(Error::InvalidInput(
+            "marker base directory is empty".to_string(),
+        ));
     }
     write_single_bypass_marker_2036(&clean)?;
     if clean == ".gemini" || clean.ends_with("/.gemini") {
@@ -322,12 +479,11 @@ fn copy_private_file_if_present(src: &str, dst: &str) {
 }
 
 fn seed_isolated_gemini_config(real_gemini_dir: &str, overlay_gemini_dir: &str) -> Result<()> {
-    if let Ok(existing_cfg) = eko::file::symlink_metadata(&join_path(overlay_gemini_dir, "config"))
-    {
+    if let Ok(existing_cfg) = eko::file::symlink_metadata(join_path(overlay_gemini_dir, "config")) {
         let is_link =
             (existing_cfg.mode() as eko::libc::mode_t & eko::libc::S_IFMT) == eko::libc::S_IFLNK;
         if is_link {
-            eko::file::remove_file(&join_path(overlay_gemini_dir, "config"));
+            eko::file::remove_file(join_path(overlay_gemini_dir, "config"));
         }
     }
     for legacy_link in ["skills", "plugins", "mcp_config.json", "GEMINI.md"] {
@@ -368,11 +524,7 @@ fn seed_isolated_gemini_config(real_gemini_dir: &str, overlay_gemini_dir: &str) 
 }
 
 /// Prepare `<config_dir>/homes/<slug>/` (`0700`) with isolated `.gemini` OAuth files and host symlinks.
-pub fn prepare_account_overlay_home(
-    paths: &Paths,
-    email: &str,
-    token_raw: &str,
-) -> Result<String> {
+pub fn prepare_account_overlay_home(paths: &Paths, email: &str, token_raw: &str) -> Result<String> {
     let norm_email = normalize_email(email)
         .ok_or_else(|| Error::InvalidInput(format!("invalid account email {email:?}")))?;
     let bundle = TokenBundle::parse(token_raw)?;
@@ -445,7 +597,10 @@ pub fn prepare_account_overlay_home(
         &envelope_bytes,
     )?;
     atomic_write_private(&join_path(&overlay_gemini, "oauth_creds.json"), &flat_bytes)?;
-    atomic_write_private(&join_path(&overlay_gemini, "google_accounts.json"), &ga_bytes)?;
+    atomic_write_private(
+        &join_path(&overlay_gemini, "google_accounts.json"),
+        &ga_bytes,
+    )?;
 
     write_keyring_bypass_marker_2036(&overlay_gemini)?;
     write_keyring_bypass_marker_2036(&overlay_ide_dir)?;
@@ -484,8 +639,7 @@ fn is_overlay_bundle_fresher(
     if cand_bundle.access_token.trim().is_empty() {
         return false;
     }
-    if sha256_hex(vault_bundle.raw_json.as_bytes()) == sha256_hex(cand_bundle.raw_json.as_bytes())
-    {
+    if sha256_hex(vault_bundle.raw_json.as_bytes()) == sha256_hex(cand_bundle.raw_json.as_bytes()) {
         return false;
     }
     match (vault_bundle.expires_at_unix, cand_bundle.expires_at_unix) {
@@ -613,9 +767,7 @@ pub fn active_isolated_sessions(paths: &Paths, email: &str) -> usize {
                 eko::file::remove_file(lock_path);
                 let _ = eko::file::flock_unlock(fd);
             }
-            Err(err)
-                if err.0 == eko::libc::EAGAIN || err.0 == eko::libc::EWOULDBLOCK =>
-            {
+            Err(err) if err.0 == eko::libc::EAGAIN || err.0 == eko::libc::EWOULDBLOCK => {
                 count += 1;
             }
             Err(_) => {}
@@ -685,14 +837,16 @@ fn resolve_real_agy_binary(paths: &Paths) -> Result<String> {
     ))
 }
 
-/// Run `agy` interactively inside `<config_dir>/homes/<slug>/` without mutating global `~/.gemini`.
-pub fn run_isolated_agy(
+fn run_isolated_agy_with<F>(
     paths: &Paths,
     store: &Store,
     vault: &Vault,
     email: &str,
-    agy_args: &[String],
-) -> Result<i32> {
+    spawn: F,
+) -> Result<(i32, String)>
+where
+    F: FnOnce(&str, &[(&str, &str)]) -> Result<i32>,
+{
     let accounts = store.load()?;
     let norm_email = accounts
         .resolve(email)
@@ -733,9 +887,145 @@ pub fn run_isolated_agy(
         env_overrides.push(("DBUS_SESSION_BUS_ADDRESS", "unix:path=/dev/null"));
     }
 
-    let spawn_res = spawn_interactive_tty(&agy_bin, agy_args, &env_overrides, None);
+    let spawn_res = spawn(&agy_bin, &env_overrides);
     drop(active_guard);
     eko::file::remove_file(&active_lock_path);
     let _ = harvest_overlay_home(paths, store, vault, &norm_email);
-    spawn_res
+    spawn_res.map(|code| (code, overlay_home))
+}
+
+/// Run `agy` interactively inside `<config_dir>/homes/<slug>/` without mutating global `~/.gemini`.
+pub fn run_isolated_agy(
+    paths: &Paths,
+    store: &Store,
+    vault: &Vault,
+    email: &str,
+    agy_args: &[String],
+) -> Result<i32> {
+    let (code, _) = run_isolated_agy_with(paths, store, vault, email, |agy_bin, env_overrides| {
+        spawn_interactive_tty(agy_bin, agy_args, env_overrides, None)
+    })?;
+    Ok(code)
+}
+
+/// Where a non-interactive `agy` run works and writes its output.
+pub struct Capture<'a> {
+    /// Working directory of the child.
+    pub cwd: &'a str,
+    /// File that receives stdout (created or truncated, mode 0600).
+    pub stdout_path: &'a str,
+    /// File that receives stderr (created or truncated, mode 0600).
+    pub stderr_path: &'a str,
+}
+
+/// Like `run_isolated_agy`, but non-interactive: runs `agy` in `capture.cwd` with stdout and stderr redirected to files; returns `(exit_code, overlay_home)`.
+pub fn run_isolated_agy_capture(
+    paths: &Paths,
+    store: &Store,
+    vault: &Vault,
+    email: &str,
+    agy_args: &[String],
+    capture: &Capture<'_>,
+) -> Result<(i32, String)> {
+    run_isolated_agy_with(paths, store, vault, email, |agy_bin, env_overrides| {
+        spawn_captured(
+            agy_bin,
+            agy_args,
+            env_overrides,
+            capture.cwd,
+            capture.stdout_path,
+            capture.stderr_path,
+        )
+    })
+}
+
+fn has_image_extension(name: &str) -> bool {
+    let Some((stem, ext)) = name.rsplit_once('.') else {
+        return false;
+    };
+    if stem.is_empty() {
+        return false;
+    }
+    ext.eq_ignore_ascii_case("jpg")
+        || ext.eq_ignore_ascii_case("jpeg")
+        || ext.eq_ignore_ascii_case("png")
+        || ext.eq_ignore_ascii_case("webp")
+}
+
+/// Image files (jpg, jpeg, png, webp) under `<overlay_home>/.gemini/antigravity-cli/brain/` at depth 1 (`<conv>/x`) and depth 2 (`<conv>/.tempmediaStorage/x`), skipping `.user_uploaded`; each as `(path, mtime_unix_ns, conversation_id)`.
+#[must_use]
+pub fn brain_images(overlay_home: &str) -> Vec<(String, i64, String)> {
+    let mut out = Vec::new();
+    let trimmed = overlay_home.trim();
+    if trimmed.is_empty() {
+        return out;
+    }
+    let brain_dir = join_path(trimmed, ".gemini/antigravity-cli/brain");
+    let Ok(conv_entries) = eko::fs::read_dir(&brain_dir) else {
+        return out;
+    };
+    for conv_entry in conv_entries {
+        let Some(conv_id) = conv_entry.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if conv_id.is_empty() || conv_id == ".user_uploaded" {
+            continue;
+        }
+        let Some(conv_path) = conv_entry.as_path().to_str() else {
+            continue;
+        };
+        let Ok(conv_meta) = eko::file::metadata(conv_path) else {
+            continue;
+        };
+        if !conv_meta.is_dir() {
+            continue;
+        }
+        let Ok(entries) = eko::fs::read_dir(conv_path) else {
+            continue;
+        };
+        for entry in entries {
+            let Some(name) = entry.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            if name == ".user_uploaded" {
+                continue;
+            }
+            let Some(entry_path) = entry.as_path().to_str() else {
+                continue;
+            };
+            let Ok(meta) = eko::file::metadata(entry_path) else {
+                continue;
+            };
+            if meta.is_file() && has_image_extension(name) {
+                let mtime_ns = stat_mtime_ns(entry_path)
+                    .unwrap_or_else(|_| meta.modified_secs().saturating_mul(1_000_000_000));
+                out.push((entry_path.to_string(), mtime_ns, conv_id.to_string()));
+            } else if meta.is_dir() && name == ".tempmediaStorage" {
+                let Ok(sub_entries) = eko::fs::read_dir(entry_path) else {
+                    continue;
+                };
+                for sub in sub_entries {
+                    let Some(sub_name) = sub.file_name().and_then(|n| n.to_str()) else {
+                        continue;
+                    };
+                    if sub_name == ".user_uploaded" {
+                        continue;
+                    }
+                    let Some(sub_path) = sub.as_path().to_str() else {
+                        continue;
+                    };
+                    let Ok(sub_meta) = eko::file::metadata(sub_path) else {
+                        continue;
+                    };
+                    if sub_meta.is_file() && has_image_extension(sub_name) {
+                        let mtime_ns = stat_mtime_ns(sub_path).unwrap_or_else(|_| {
+                            sub_meta.modified_secs().saturating_mul(1_000_000_000)
+                        });
+                        out.push((sub_path.to_string(), mtime_ns, conv_id.to_string()));
+                    }
+                }
+            }
+        }
+    }
+    out
 }

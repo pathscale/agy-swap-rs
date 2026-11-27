@@ -134,7 +134,12 @@ pub(crate) fn compute_areas(area: Rect, state: &DeckState) -> DeckAreas {
     let body_h = body_bottom.saturating_sub(y);
     let body = Rect::new(area.x, y, area.w, body_h);
     if state.view != ActiveView::Dashboard || state.accounts.is_empty() {
-        return DeckAreas { body, list: Rect::new(0, 0, 0, 0), detail: body, stacked: false };
+        return DeckAreas {
+            body,
+            list: Rect::new(0, 0, 0, 0),
+            detail: body,
+            stacked: false,
+        };
     }
     match bp {
         Breakpoint::Wide => {
@@ -231,7 +236,13 @@ pub fn render_deck(frame: &mut Frame<'_>, state: &DeckState, theme: &Theme) {
     }
     if area.h >= 3 {
         let footer_y = area.bottom().saturating_sub(1);
-        render_footer_bar(frame, Rect::new(area.x, footer_y, area.w, 1), bp, state, theme);
+        render_footer_bar(
+            frame,
+            Rect::new(area.x, footer_y, area.w, 1),
+            bp,
+            state,
+            theme,
+        );
     }
 
     views::render_overlays(frame, state, theme);
@@ -310,7 +321,11 @@ fn render_header_active(frame: &mut Frame<'_>, row: Rect, state: &DeckState, the
         None => "o Active: none (press Enter on an account)".to_string(),
     };
     let act_style = if state.active_email.is_some() {
-        Style { fg: theme.active_name.fg, bg: theme.header_bar.bg, attrs: theme.active_name.attrs }
+        Style {
+            fg: theme.active_name.fg,
+            bg: theme.header_bar.bg,
+            attrs: theme.active_name.attrs,
+        }
     } else {
         theme.subtitle
     };
@@ -349,7 +364,9 @@ fn render_header_active(frame: &mut Frame<'_>, row: Rect, state: &DeckState, the
 fn render_restart_banner(frame: &mut Frame<'_>, row: Rect, state: &DeckState, theme: &Theme) {
     frame.surface.fill(row, ' ', theme.banner_warn);
     let msg = " ! LogWatch: restart agy to apply rotated credentials ";
-    let used = frame.surface.put_str(row.x, row.y, row.w, msg, theme.banner_warn);
+    let used = frame
+        .surface
+        .put_str(row.x, row.y, row.w, msg, theme.banner_warn);
     let btn = "[Y] Ack restart";
     let bw = display_width(btn) as u16;
     let bx = row.x.saturating_add(used).saturating_add(1);
@@ -370,7 +387,12 @@ fn render_empty_deck(frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
     let box_h = area.h.clamp(1, 7);
     let rect = agy_tui::centered_rect(area, box_w, box_h);
     if rect.w >= 6 && rect.h >= 3 {
-        frame.surface.draw_box(rect, theme.borders(), theme.panel_border, Some(theme.panel_bg));
+        frame.surface.draw_box(
+            rect,
+            theme.borders(),
+            theme.panel_border,
+            Some(theme.panel_bg),
+        );
         let inner = rect.inner(2, 1);
         if !inner.is_empty() {
             frame.surface.put_str(
@@ -391,7 +413,13 @@ fn render_empty_deck(frame: &mut Frame<'_>, area: Rect, theme: &Theme) {
             }
         }
     } else {
-        frame.surface.put_str(area.x, area.y, area.w, "No accounts - press [i] or [a]", theme.muted);
+        frame.surface.put_str(
+            area.x,
+            area.y,
+            area.w,
+            "No accounts - press [i] or [a]",
+            theme.muted,
+        );
     }
 }
 
@@ -418,7 +446,11 @@ fn render_dashboard_body(
                     theme.divider
                 };
                 let vch = if frame.ascii { '|' } else { '\u{2502}' };
-                frame.surface.fill(Rect::new(div_x, areas.body.y, 1, areas.body.h), vch, div_style);
+                frame.surface.fill(
+                    Rect::new(div_x, areas.body.y, 1, areas.body.h),
+                    vch,
+                    div_style,
+                );
                 let hit_x = div_x.saturating_sub(1);
                 let hit_w = 3.min(areas.body.right().saturating_sub(hit_x));
                 frame.hit(
@@ -476,14 +508,23 @@ fn render_account_list(
     if area.is_empty() {
         return;
     }
-    frame.hit(HitTarget::ListScrollArea.encode(), area, PointerShape::Default);
+    frame.hit(
+        HitTarget::ListScrollArea.encode(),
+        area,
+        PointerShape::Default,
+    );
     let emails = state.visible_emails();
     let mut y = area.y;
     if area.h >= 4 {
         let hdr = if state.filter.is_empty() {
             format!(" ACCOUNTS ({})", emails.len())
         } else {
-            format!(" ACCOUNTS ({}/{}) filter: {}", emails.len(), state.accounts.len(), state.filter)
+            format!(
+                " ACCOUNTS ({}/{}) filter: {}",
+                emails.len(),
+                state.accounts.len(),
+                state.filter
+            )
         };
         frame.surface.put_str(area.x, y, area.w, &hdr, theme.muted);
         y = y.saturating_add(1);
@@ -583,7 +624,11 @@ fn render_account_entry(
 
     let sel_mark = if selected { ">" } else { " " };
     let act_mark = if is_active {
-        if frame.ascii { "*" } else { "\u{25cf}" }
+        if frame.ascii {
+            "*"
+        } else {
+            "\u{25cf}"
+        }
     } else {
         " "
     };
@@ -630,7 +675,9 @@ fn render_account_entry(
         theme.on_row(theme.text_bold, selected, hovered)
     };
     if max_id_w > 0 {
-        frame.surface.put_str(x, rect.y, max_id_w, &identity, id_style);
+        frame
+            .surface
+            .put_str(x, rect.y, max_id_w, &identity, id_style);
     }
     if right_anchor < badge_x {
         let run_st = Style {
@@ -647,7 +694,9 @@ fn render_account_entry(
         );
     }
     if badge_x > rect.x && bw <= rect.w {
-        frame.surface.put_str(badge_x, rect.y, bw, badge_str, b_style);
+        frame
+            .surface
+            .put_str(badge_x, rect.y, bw, badge_str, b_style);
     }
 
     if rect.h >= 2 {
@@ -673,8 +722,8 @@ fn render_account_entry(
                 theme.on_row(theme.muted, selected, hovered),
             );
         } else if let Some(ref snap) = acc.quota {
-            let bar_w = ((right2.saturating_sub(x2) as usize).saturating_sub(24) / 2).clamp(4, 12)
-                as u16;
+            let bar_w =
+                ((right2.saturating_sub(x2) as usize).saturating_sub(24) / 2).clamp(4, 12) as u16;
             for (short, tone, pool) in [
                 ("Gem", PoolTone::Gemini, &snap.gemini),
                 ("C/G", PoolTone::ClaudeGpt, &snap.claude_gpt),
@@ -705,13 +754,7 @@ fn render_account_entry(
                     Some(v) => format!("{v:>3.0}%  "),
                     None => " n/a  ".to_string(),
                 };
-                x2 = x2.saturating_add(frame.surface.put_str(
-                    x2,
-                    y2,
-                    6,
-                    &pct_lbl,
-                    fill_st,
-                ));
+                x2 = x2.saturating_add(frame.surface.put_str(x2, y2, 6, &pct_lbl, fill_st));
             }
         } else {
             frame.surface.put_str(
@@ -767,7 +810,12 @@ fn render_usage_matrix(
     };
     let inner = if boxed {
         let rect = Rect::new(x, y, w, card_h);
-        frame.surface.draw_box(rect, theme.borders(), theme.panel_border, Some(theme.panel_bg));
+        frame.surface.draw_box(
+            rect,
+            theme.borders(),
+            theme.panel_border,
+            Some(theme.panel_bg),
+        );
         if rect.w > 30 {
             let title_st = Style {
                 fg: theme.title.fg,
@@ -801,14 +849,22 @@ fn render_usage_matrix(
     let arg_w: u16 = if wide { 5 } else { 4 };
     let rst_w: u16 = if wide { 6 } else { 4 };
     let base_bg = if boxed { theme.panel_bg } else { theme.body };
-    let hdr_st = Style { fg: theme.muted.fg, bg: base_bg.bg, attrs: theme.muted.attrs };
+    let hdr_st = Style {
+        fg: theme.muted.fg,
+        bg: base_bg.bg,
+        attrs: theme.muted.attrs,
+    };
 
     let mut hx = inner.x;
     frame.surface.put_str(hx, inner.y, 2, " #", hdr_st);
     hx = hx.saturating_add(3);
-    frame.surface.put_str(hx, inner.y, acct_w, "Account", hdr_st);
+    frame
+        .surface
+        .put_str(hx, inner.y, acct_w, "Account", hdr_st);
     hx = hx.saturating_add(acct_w + 1);
-    frame.surface.put_str(hx, inner.y, status_w, "Status", hdr_st);
+    frame
+        .surface
+        .put_str(hx, inner.y, status_w, "Status", hdr_st);
     hx = hx.saturating_add(status_w + 1);
     for lbl in if wide {
         ["Gem 5h", "Gem Wk", "C/G 5h", "C/G Wk"]
@@ -818,7 +874,13 @@ fn render_usage_matrix(
         frame.surface.put_str(hx, inner.y, pct_w, lbl, hdr_st);
         hx = hx.saturating_add(pct_w + 1);
     }
-    frame.surface.put_str(hx, inner.y, arg_w, if wide { "Argon" } else { "Arg" }, hdr_st);
+    frame.surface.put_str(
+        hx,
+        inner.y,
+        arg_w,
+        if wide { "Argon" } else { "Arg" },
+        hdr_st,
+    );
     hx = hx.saturating_add(arg_w + 1);
     if hx < inner.right() {
         frame.surface.put_str(
@@ -834,7 +896,13 @@ fn render_usage_matrix(
     let sel_email = state.selected_email();
     let sel_order_idx = sel_email
         .as_deref()
-        .and_then(|s| state.accounts.order.iter().position(|e| e.eq_ignore_ascii_case(s)))
+        .and_then(|s| {
+            state
+                .accounts
+                .order
+                .iter()
+                .position(|e| e.eq_ignore_ascii_case(s))
+        })
         .unwrap_or(0);
     let start = if sel_order_idx >= show_rows {
         (sel_order_idx + 1 - show_rows).min(total.saturating_sub(show_rows))
@@ -843,14 +911,23 @@ fn render_usage_matrix(
     };
 
     let mut ry = inner.y.saturating_add(1);
-    for (ord_idx, email) in state.accounts.order.iter().enumerate().skip(start).take(show_rows) {
+    for (ord_idx, email) in state
+        .accounts
+        .order
+        .iter()
+        .enumerate()
+        .skip(start)
+        .take(show_rows)
+    {
         if ry >= inner.bottom() {
             break;
         }
         let Some(acc) = state.accounts.get(email) else {
             continue;
         };
-        let vis_pos = vis_emails.iter().position(|v| v.eq_ignore_ascii_case(email));
+        let vis_pos = vis_emails
+            .iter()
+            .position(|v| v.eq_ignore_ascii_case(email));
         let is_sel = sel_email
             .as_deref()
             .map(|s| s.eq_ignore_ascii_case(email))
@@ -876,26 +953,50 @@ fn render_usage_matrix(
             .map(|a| a.eq_ignore_ascii_case(&acc.email))
             .unwrap_or(false);
         let mark = if is_active {
-            if frame.ascii { "*" } else { "\u{25cf}" }
+            if frame.ascii {
+                "*"
+            } else {
+                "\u{25cf}"
+            }
         } else {
             " "
         };
         let slot_str = format!("{mark}{}", ord_idx + 1);
         let mut cx = inner.x;
         let slot_st = if is_active {
-            Style { fg: theme.active_dot.fg, bg: row_st.bg, attrs: theme.active_dot.attrs }
+            Style {
+                fg: theme.active_dot.fg,
+                bg: row_st.bg,
+                attrs: theme.active_dot.attrs,
+            }
         } else {
             row_st
         };
-        frame.surface.put_str(cx, ry, 2, &slot_str, theme.on_row(slot_st, is_sel, is_hov));
+        frame
+            .surface
+            .put_str(cx, ry, 2, &slot_str, theme.on_row(slot_st, is_sel, is_hov));
         cx = cx.saturating_add(3);
 
         let acct_st = if is_active {
-            Style { fg: theme.active_name.fg, bg: row_st.bg, attrs: theme.active_name.attrs }
+            Style {
+                fg: theme.active_name.fg,
+                bg: row_st.bg,
+                attrs: theme.active_name.attrs,
+            }
         } else {
-            Style { fg: theme.text_bold.fg, bg: row_st.bg, attrs: theme.text_bold.attrs }
+            Style {
+                fg: theme.text_bold.fg,
+                bg: row_st.bg,
+                attrs: theme.text_bold.attrs,
+            }
         };
-        frame.surface.put_str(cx, ry, acct_w, &acc.email, theme.on_row(acct_st, is_sel, is_hov));
+        frame.surface.put_str(
+            cx,
+            ry,
+            acct_w,
+            &acc.email,
+            theme.on_row(acct_st, is_sel, is_hov),
+        );
         cx = cx.saturating_add(acct_w + 1);
 
         let badge = state.account_badge(acc);
@@ -905,42 +1006,93 @@ fn render_usage_matrix(
         } else if run_n == 1 {
             ("[RUN]".to_string(), theme.pool_extra)
         } else {
-            (Theme::badge_compact_label(badge).to_string(), theme.badge_style(badge))
+            (
+                Theme::badge_compact_label(badge).to_string(),
+                theme.badge_style(badge),
+            )
         };
-        let st_cell = Style { fg: st_fg.fg, bg: row_st.bg, attrs: st_fg.attrs };
-        frame.surface.put_str(cx, ry, status_w, &st_lbl, theme.on_row(st_cell, is_sel, is_hov));
+        let st_cell = Style {
+            fg: st_fg.fg,
+            bg: row_st.bg,
+            attrs: st_fg.attrs,
+        };
+        frame.surface.put_str(
+            cx,
+            ry,
+            status_w,
+            &st_lbl,
+            theme.on_row(st_cell, is_sel, is_hov),
+        );
         cx = cx.saturating_add(status_w + 1);
 
         let snap = acc.quota.as_ref();
         let cells = [
-            (snap.and_then(|q| q.gemini.five_hour.remaining_pct), PoolTone::Gemini),
-            (snap.and_then(|q| q.gemini.weekly.remaining_pct), PoolTone::Gemini),
-            (snap.and_then(|q| q.claude_gpt.five_hour.remaining_pct), PoolTone::ClaudeGpt),
-            (snap.and_then(|q| q.claude_gpt.weekly.remaining_pct), PoolTone::ClaudeGpt),
+            (
+                snap.and_then(|q| q.gemini.five_hour.remaining_pct),
+                PoolTone::Gemini,
+            ),
+            (
+                snap.and_then(|q| q.gemini.weekly.remaining_pct),
+                PoolTone::Gemini,
+            ),
+            (
+                snap.and_then(|q| q.claude_gpt.five_hour.remaining_pct),
+                PoolTone::ClaudeGpt,
+            ),
+            (
+                snap.and_then(|q| q.claude_gpt.weekly.remaining_pct),
+                PoolTone::ClaudeGpt,
+            ),
         ];
         for (val, tone) in cells {
             let txt = format_matrix_pct(val, pct_w as usize);
             let cst = match val {
                 Some(p) => {
                     let g = theme.pool_gauge_style(tone, p);
-                    Style { fg: g.fg, bg: row_st.bg, attrs: g.attrs }
+                    Style {
+                        fg: g.fg,
+                        bg: row_st.bg,
+                        attrs: g.attrs,
+                    }
                 }
-                None => Style { fg: theme.muted.fg, bg: row_st.bg, attrs: theme.muted.attrs },
+                None => Style {
+                    fg: theme.muted.fg,
+                    bg: row_st.bg,
+                    attrs: theme.muted.attrs,
+                },
             };
-            frame.surface.put_str(cx, ry, pct_w, &txt, theme.on_row(cst, is_sel, is_hov));
+            frame
+                .surface
+                .put_str(cx, ry, pct_w, &txt, theme.on_row(cst, is_sel, is_hov));
             cx = cx.saturating_add(pct_w + 1);
         }
 
-        let arg_val = snap.and_then(|q| q.argon.as_ref()).and_then(PoolQuota::effective_pct);
+        let arg_val = snap
+            .and_then(|q| q.argon.as_ref())
+            .and_then(PoolQuota::effective_pct);
         let arg_txt = format_matrix_pct(arg_val, arg_w as usize);
         let arg_st = match arg_val {
             Some(p) => {
                 let g = theme.pool_gauge_style(PoolTone::Argon, p);
-                Style { fg: g.fg, bg: row_st.bg, attrs: g.attrs }
+                Style {
+                    fg: g.fg,
+                    bg: row_st.bg,
+                    attrs: g.attrs,
+                }
             }
-            None => Style { fg: theme.muted.fg, bg: row_st.bg, attrs: theme.muted.attrs },
+            None => Style {
+                fg: theme.muted.fg,
+                bg: row_st.bg,
+                attrs: theme.muted.attrs,
+            },
         };
-        frame.surface.put_str(cx, ry, arg_w, &arg_txt, theme.on_row(arg_st, is_sel, is_hov));
+        frame.surface.put_str(
+            cx,
+            ry,
+            arg_w,
+            &arg_txt,
+            theme.on_row(arg_st, is_sel, is_hov),
+        );
         cx = cx.saturating_add(arg_w + 1);
 
         if cx < inner.right() {
@@ -955,7 +1107,11 @@ fn render_usage_matrix(
                 .min()
             });
             let r_txt = format_countdown(earliest, state.now_unix);
-            let r_st = Style { fg: theme.muted.fg, bg: row_st.bg, attrs: theme.muted.attrs };
+            let r_st = Style {
+                fg: theme.muted.fg,
+                bg: row_st.bg,
+                attrs: theme.muted.attrs,
+            };
             frame.surface.put_str(
                 cx,
                 ry,
@@ -979,7 +1135,11 @@ fn render_detail_pane(
     if area.is_empty() {
         return;
     }
-    frame.hit(HitTarget::DetailScrollArea.encode(), area, PointerShape::Default);
+    frame.hit(
+        HitTarget::DetailScrollArea.encode(),
+        area,
+        PointerShape::Default,
+    );
     let Some(acc) = state.selected_account() else {
         frame.surface.put_str(
             area.x.saturating_add(1),
@@ -1033,10 +1193,14 @@ fn render_detail_pane(
     };
     let hdr_max = bx.saturating_sub(inner_x).saturating_sub(1);
     if hdr_max > 0 {
-        frame.surface.put_str(inner_x, y, hdr_max, &hdr, theme.text_bold);
+        frame
+            .surface
+            .put_str(inner_x, y, hdr_max, &hdr, theme.text_bold);
     }
     if bw <= inner_w {
-        frame.surface.put_str(bx, y, bw, b_lbl, theme.badge_style(badge));
+        frame
+            .surface
+            .put_str(bx, y, bw, b_lbl, theme.badge_style(badge));
     }
     y = y.saturating_add(1);
 
@@ -1057,7 +1221,9 @@ fn render_detail_pane(
                 .verify_url
                 .as_deref()
                 .unwrap_or("Press [w] or run 'agy-swap-rs verify --open'");
-            frame.surface.put_str(inner_x, y + 1, inner_w, url_hint, theme.muted);
+            frame
+                .surface
+                .put_str(inner_x, y + 1, inner_w, url_hint, theme.muted);
         }
         return;
     }
@@ -1073,8 +1239,13 @@ fn render_detail_pane(
     };
 
     if mode != DetailMode::Compact && y + 6 < area.bottom() {
-        let fresh = format!("Snapshot: {}", format_age(snap.fetched_at_unix, state.now_unix));
-        frame.surface.put_str(inner_x, y, inner_w, &fresh, theme.muted);
+        let fresh = format!(
+            "Snapshot: {}",
+            format_age(snap.fetched_at_unix, state.now_unix)
+        );
+        frame
+            .surface
+            .put_str(inner_x, y, inner_w, &fresh, theme.muted);
         y = y.saturating_add(1);
     }
 
@@ -1175,13 +1346,23 @@ pub(crate) fn draw_pool_card(
     }
     let eff = pool.quota.effective_pct().unwrap_or(0.0);
     let border_st = if pool.quota.effective_pct().is_some() && eff <= 10.0 {
-        Style { fg: theme.badge_critical.fg, bg: theme.panel_bg.bg, attrs: theme.panel_border.attrs }
+        Style {
+            fg: theme.badge_critical.fg,
+            bg: theme.panel_bg.bg,
+            attrs: theme.panel_border.attrs,
+        }
     } else if pool.quota.effective_pct().is_some() && eff <= 30.0 {
-        Style { fg: theme.badge_low.fg, bg: theme.panel_bg.bg, attrs: theme.panel_border.attrs }
+        Style {
+            fg: theme.badge_low.fg,
+            bg: theme.panel_bg.bg,
+            attrs: theme.panel_border.attrs,
+        }
     } else {
         theme.panel_border
     };
-    frame.surface.draw_box(rect, theme.borders(), border_st, Some(theme.panel_bg));
+    frame
+        .surface
+        .draw_box(rect, theme.borders(), border_st, Some(theme.panel_bg));
     let inner = rect.inner(1, 1);
     if inner.is_empty() {
         return;
@@ -1195,7 +1376,9 @@ pub(crate) fn draw_pool_card(
     let ex = inner.right().saturating_sub(ew);
     let title_max = ex.saturating_sub(inner.x).saturating_sub(1);
     if title_max > 0 {
-        frame.surface.put_str(inner.x, inner.y, title_max, pool.label, accent);
+        frame
+            .surface
+            .put_str(inner.x, inner.y, title_max, pool.label, accent);
     }
     if ew <= inner.w {
         let val_st = theme.pool_gauge_style(pool.tone, eff);
@@ -1204,7 +1387,10 @@ pub(crate) fn draw_pool_card(
 
     let mut wy = inner.y.saturating_add(1);
     let spacious = inner.h >= 5;
-    for (w_label, win) in [("5-Hour", &pool.quota.five_hour), ("Weekly", &pool.quota.weekly)] {
+    for (w_label, win) in [
+        ("5-Hour", &pool.quota.five_hour),
+        ("Weekly", &pool.quota.weekly),
+    ] {
         if wy >= inner.bottom() {
             break;
         }
@@ -1231,7 +1417,14 @@ fn draw_window_row(
     theme: &Theme,
 ) {
     let pct = win.remaining_pct.unwrap_or(0.0);
-    let fill = theme.pool_gauge_style(tone, if win.remaining_pct.is_some() { pct } else { 50.0 });
+    let fill = theme.pool_gauge_style(
+        tone,
+        if win.remaining_pct.is_some() {
+            pct
+        } else {
+            50.0
+        },
+    );
     let cd = format_countdown(win.reset_at_unix, now_unix);
     let pct_str = match win.remaining_pct {
         Some(v) => format!("{v:>5.1}%"),
@@ -1243,7 +1436,9 @@ fn draw_window_row(
         } else {
             format!("{label}  {pct_str}  resets {cd}")
         };
-        frame.surface.put_str(area.x, area.y, area.w, &info, theme.panel_bg);
+        frame
+            .surface
+            .put_str(area.x, area.y, area.w, &info, theme.panel_bg);
         frame.surface.draw_gauge(
             Rect::new(area.x, area.y + 1, area.w, 1),
             pct as f32,
@@ -1254,7 +1449,9 @@ fn draw_window_row(
     } else {
         let mut x = area.x;
         let lbl_w = 6.min(area.w);
-        frame.surface.put_str(x, area.y, lbl_w, label, theme.panel_bg);
+        frame
+            .surface
+            .put_str(x, area.y, lbl_w, label, theme.panel_bg);
         x = x.saturating_add(lbl_w).saturating_add(1);
         let suffix = if cd == "-" {
             pct_str
@@ -1274,7 +1471,9 @@ fn draw_window_row(
             x = x.saturating_add(bar_w).saturating_add(1);
         }
         if x < area.right() {
-            frame.surface.put_str(x, area.y, area.right().saturating_sub(x), &suffix, fill);
+            frame
+                .surface
+                .put_str(x, area.y, area.right().saturating_sub(x), &suffix, fill);
         }
     }
 }
@@ -1292,12 +1491,18 @@ fn draw_compact_pool_line(
     let eff = pool.quota.effective_pct().unwrap_or(0.0);
     let fill = theme.pool_gauge_style(
         pool.tone,
-        if pool.quota.effective_pct().is_some() { eff } else { 50.0 },
+        if pool.quota.effective_pct().is_some() {
+            eff
+        } else {
+            50.0
+        },
     );
     let mut x = row.x;
     let lbl = if row.w >= 56 { pool.label } else { pool.short };
     let lbl_col: u16 = if row.w >= 56 { 14 } else { 5 };
-    frame.surface.put_str(x, row.y, lbl_col.min(row.w), lbl, theme.text_bold);
+    frame
+        .surface
+        .put_str(x, row.y, lbl_col.min(row.w), lbl, theme.text_bold);
     x = x.saturating_add(lbl_col).saturating_add(1);
     let cd = format_countdown(pool.quota.next_reset_unix(), now_unix);
     let pct_txt = match pool.quota.effective_pct() {
@@ -1330,7 +1535,9 @@ fn draw_compact_pool_line(
         x = x.saturating_add(bar_w).saturating_add(1);
     }
     if x < row.right() {
-        frame.surface.put_str(x, row.y, row.right().saturating_sub(x), &tail, fill);
+        frame
+            .surface
+            .put_str(x, row.y, row.right().saturating_sub(x), &tail, fill);
     }
 }
 
@@ -1343,7 +1550,9 @@ fn render_status_bar(frame: &mut Frame<'_>, row: Rect, state: &DeckState, theme:
     }
     if state.modal == Modal::FilterInput {
         let prompt = format!("/{}_  (Enter apply - Esc cancel)", state.filter);
-        frame.surface.put_str(x, row.y, w, &prompt, theme.banner_info);
+        frame
+            .surface
+            .put_str(x, row.y, w, &prompt, theme.banner_info);
         return;
     }
     if let Some((ref msg, lvl)) = state.status_line {
@@ -1439,9 +1648,17 @@ fn render_footer_bar(
         let show_desc = x.saturating_add(kw + dw) <= limit;
         let total_w = if show_desc { kw + dw } else { kw };
         if show_desc {
-            frame.surface.put_str(x + kw, row.y, dw, &desc_txt, theme.keycap_desc);
+            frame
+                .surface
+                .put_str(x + kw, row.y, dw, &desc_txt, theme.keycap_desc);
         }
-        frame.hit(hit_id, Rect::new(x, row.y, total_w, 1), PointerShape::Pointer);
-        x = x.saturating_add(total_w).saturating_add(if show_desc { 0 } else { 1 });
+        frame.hit(
+            hit_id,
+            Rect::new(x, row.y, total_w, 1),
+            PointerShape::Pointer,
+        );
+        x = x
+            .saturating_add(total_w)
+            .saturating_add(if show_desc { 0 } else { 1 });
     }
 }

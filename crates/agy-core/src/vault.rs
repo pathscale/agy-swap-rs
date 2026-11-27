@@ -15,9 +15,9 @@ use core::fmt;
 use eko::command::Command;
 use serde::{Deserialize, Serialize};
 
-use crate::model::{Accounts, normalize_email};
+use crate::model::{normalize_email, Accounts};
 use crate::paths::Paths;
-use crate::store::{FileLock, atomic_write_private, ensure_private_dir};
+use crate::store::{atomic_write_private, ensure_private_dir, FileLock};
 use crate::{Error, Result};
 
 const VAULT_KEYCHAIN_SERVICE: &str = "agy-swap";
@@ -25,7 +25,9 @@ const VAULT_KEYCHAIN_SERVICE: &str = "agy-swap";
 /// Active secret backend selected via `AGY_SWAP_VAULT`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum VaultMode {
+    #[default]
     File,
     Keychain,
 }
@@ -53,12 +55,6 @@ impl VaultMode {
             Self::File => "file",
             Self::Keychain => "keychain",
         }
-    }
-}
-
-impl Default for VaultMode {
-    fn default() -> Self {
-        Self::File
     }
 }
 
@@ -97,7 +93,9 @@ pub(crate) fn keychain_get(service: &str, account: &str) -> Result<Option<String
         .args(["find-generic-password", "-a", account, "-s", service, "-w"])
         .output()
     else {
-        return Err(Error::Auth("failed to invoke /usr/bin/security".to_string()));
+        return Err(Error::Auth(
+            "failed to invoke /usr/bin/security".to_string(),
+        ));
     };
     if !out.success() {
         return Ok(None);
@@ -161,7 +159,9 @@ pub(crate) fn keychain_set(
         ])
     };
     let Some(out) = cmd.output() else {
-        return Err(Error::Auth("failed to invoke /usr/bin/security".to_string()));
+        return Err(Error::Auth(
+            "failed to invoke /usr/bin/security".to_string(),
+        ));
     };
     if out.success() {
         Ok(())
@@ -290,7 +290,8 @@ impl Vault {
 
     #[must_use]
     pub fn key_for_email(email: &str) -> String {
-        let normalized = normalize_email(email).unwrap_or_else(|| email.trim().to_ascii_lowercase());
+        let normalized =
+            normalize_email(email).unwrap_or_else(|| email.trim().to_ascii_lowercase());
         format!("account:{normalized}")
     }
 

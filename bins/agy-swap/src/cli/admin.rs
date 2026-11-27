@@ -1,4 +1,6 @@
-use agy_core::backup::{export_backup, export_backup_to_file, import_backup_from_file, verify_backup, BackupBundle};
+use agy_core::backup::{
+    export_backup, export_backup_to_file, import_backup_from_file, verify_backup, BackupBundle,
+};
 use agy_core::http::HttpClient;
 use agy_core::logwatch::{ack_restart, load_runtime, poll_logs_once};
 use agy_core::ops::{
@@ -38,9 +40,16 @@ pub fn cmd_doctor(ctx: &AppContext, _m: &ArgMatches) -> i32 {
         } else {
             (ctx.palette.red, "✕")
         };
-        println!("{color}{sym}{} {:<18} {}", ctx.palette.reset, check.name, check.detail);
+        println!(
+            "{color}{sym}{} {:<18} {}",
+            ctx.palette.reset, check.name, check.detail
+        );
     }
-    if healthy { 0 } else { 1 }
+    if healthy {
+        0
+    } else {
+        1
+    }
 }
 
 pub fn cmd_config(ctx: &AppContext, m: &ArgMatches) -> i32 {
@@ -54,7 +63,10 @@ pub fn cmd_config(ctx: &AppContext, m: &ArgMatches) -> i32 {
             if ctx.json {
                 return ctx.ok_json("config show", json!(settings));
             }
-            println!("{}", serde_json::to_string_pretty(&settings).unwrap_or_default());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&settings).unwrap_or_default()
+            );
             0
         }
         "set" => {
@@ -71,11 +83,18 @@ pub fn cmd_config(ctx: &AppContext, m: &ArgMatches) -> i32 {
                 },
                 "policy" | "default_policy" => match RankingPolicy::parse(val) {
                     Some(rp) => settings.default_policy = rp,
-                    None => return ctx.fail("config set", "expected sticky, balanced, or round-robin"),
+                    None => {
+                        return ctx.fail("config set", "expected sticky, balanced, or round-robin")
+                    }
                 },
                 "route_strategy" => match RouteStrategy::parse(val) {
                     Some(rs) => settings.route_strategy = rs,
-                    None => return ctx.fail("config set", "expected same-family-first, same-account-first, or strict-family"),
+                    None => {
+                        return ctx.fail(
+                            "config set",
+                            "expected same-family-first, same-account-first, or strict-family",
+                        )
+                    }
                 },
                 "min_remaining_pct" => match val.parse::<u8>() {
                     Ok(v) if v <= 100 => settings.min_remaining_pct = v,
@@ -91,7 +110,12 @@ pub fn cmd_config(ctx: &AppContext, m: &ArgMatches) -> i32 {
                         }
                     }
                 }
-                "pool_failover.enabled" => settings.pool_failover.enabled = matches!(val.to_ascii_lowercase().as_str(), "1" | "true" | "on" | "yes"),
+                "pool_failover.enabled" => {
+                    settings.pool_failover.enabled = matches!(
+                        val.to_ascii_lowercase().as_str(),
+                        "1" | "true" | "on" | "yes"
+                    )
+                }
                 "pool_failover.match_mode" => match PoolMatchMode::parse(val) {
                     Some(pm) => settings.pool_failover.match_mode = pm,
                     None => return ctx.fail("config set", "expected any or all"),
@@ -101,7 +125,9 @@ pub fn cmd_config(ctx: &AppContext, m: &ArgMatches) -> i32 {
                     Err(_) => return ctx.fail("config set", "invalid integer"),
                 },
                 other if !other.is_empty() => {
-                    settings.extra.insert(other.to_string(), Value::String(val.to_string()));
+                    settings
+                        .extra
+                        .insert(other.to_string(), Value::String(val.to_string()));
                 }
                 _ => return ctx.fail("config set", "missing key"),
             }
@@ -116,7 +142,10 @@ pub fn cmd_config(ctx: &AppContext, m: &ArgMatches) -> i32 {
         }
         "reset" => {
             if !opt_flag(sub_m, "force") && !opt_flag(m, "force") {
-                return ctx.fail("config reset", "pass --force to reset settings.json to defaults");
+                return ctx.fail(
+                    "config reset",
+                    "pass --force to reset settings.json to defaults",
+                );
             }
             let defaults = Settings::default();
             if let Err(err) = ctx.store.save_settings(&defaults) {
@@ -160,18 +189,38 @@ pub fn cmd_watch(ctx: &AppContext, m: &ArgMatches) -> i32 {
             }
         }
         let settings = ctx.store.load_settings().unwrap_or_default();
-        let mode = if no_rotate { SwitchMode::Manual } else { settings.switch_mode };
+        let mode = if no_rotate {
+            SwitchMode::Manual
+        } else {
+            settings.switch_mode
+        };
         let now_unix = agy_core::paths::wall_unix_secs();
-        let failover = match poll_logs_once(&ctx.paths, &ctx.store, &ctx.vault, &ctx.session, mode, force_switch, now_unix) {
+        let failover = match poll_logs_once(
+            &ctx.paths,
+            &ctx.store,
+            &ctx.vault,
+            &ctx.session,
+            mode,
+            force_switch,
+            now_unix,
+        ) {
             Ok(f) => f,
             Err(err) => return ctx.fail("watch", err),
         };
         let runtime = load_runtime(&ctx.paths).unwrap_or_default();
         let active = ctx.session.current_email();
         if ctx.json {
-            let _ = ctx.ok_json("watch", json!({"active": active, "failover": failover, "runtime": runtime}));
+            let _ = ctx.ok_json(
+                "watch",
+                json!({"active": active, "failover": failover, "runtime": runtime}),
+            );
         } else if let Some(ref res) = failover {
-            println!("watch: outcome={} switched_to={} restart_needed={}", res.outcome, res.switched_to.as_deref().unwrap_or("-"), res.restart_needed);
+            println!(
+                "watch: outcome={} switched_to={} restart_needed={}",
+                res.outcome,
+                res.switched_to.as_deref().unwrap_or("-"),
+                res.restart_needed
+            );
         } else if once {
             println!("watch: idle (active={})", active.as_deref().unwrap_or("-"));
         }
@@ -188,7 +237,10 @@ pub fn cmd_ack_restart(ctx: &AppContext) -> i32 {
         Err(err) => return ctx.fail("ack-restart", err),
     };
     if ctx.json {
-        return ctx.ok_json("ack-restart", json!({"restart_agy_needed": runtime.restart_agy_needed, "runtime": runtime}));
+        return ctx.ok_json(
+            "ack-restart",
+            json!({"restart_agy_needed": runtime.restart_agy_needed, "runtime": runtime}),
+        );
     }
     println!("restart-acknowledged");
     0
@@ -196,7 +248,10 @@ pub fn cmd_ack_restart(ctx: &AppContext) -> i32 {
 
 pub fn cmd_history(ctx: &AppContext, m: &ArgMatches) -> i32 {
     let action = opt_str(m, "action").unwrap_or("list");
-    let limit = opt_str(m, "limit").and_then(|s| s.parse::<usize>().ok()).unwrap_or(20).clamp(1, 10_000);
+    let limit = opt_str(m, "limit")
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(20)
+        .clamp(1, 10_000);
     match action {
         "list" => {
             let entries = match ctx.store.read_history(limit) {
@@ -208,7 +263,12 @@ pub fn cmd_history(ctx: &AppContext, m: &ArgMatches) -> i32 {
             }
             for e in &entries {
                 let ts = agy_core::paths::format_rfc3339_utc(e.timestamp_unix);
-                println!("{ts}  {:<16}  {:<28}  {}", e.kind, e.email.as_deref().unwrap_or("-"), e.detail);
+                println!(
+                    "{ts}  {:<16}  {:<28}  {}",
+                    e.kind,
+                    e.email.as_deref().unwrap_or("-"),
+                    e.detail
+                );
             }
             0
         }
@@ -283,14 +343,25 @@ pub fn cmd_forecast(ctx: &AppContext, m: &ArgMatches) -> i32 {
     let now_unix = agy_core::paths::wall_unix_secs();
     let rows: Vec<_> = compute_forecasts(&accounts, now_unix)
         .into_iter()
-        .filter(|f| filter_email.as_deref().map(|w| w.eq_ignore_ascii_case(&f.email)).unwrap_or(true))
+        .filter(|f| {
+            filter_email
+                .as_deref()
+                .map(|w| w.eq_ignore_ascii_case(&f.email))
+                .unwrap_or(true)
+        })
         .collect();
     if ctx.json {
         return ctx.ok_json("forecast", json!({"forecasts": rows}));
     }
     for row in &rows {
-        let pct = row.remaining_pct.map(|p| format!("{p:.1}%")).unwrap_or_else(|| "unknown".to_string());
-        println!("{:<28} {:<14} {:<10} confidence={}", row.email, row.pool, pct, row.confidence);
+        let pct = row
+            .remaining_pct
+            .map(|p| format!("{p:.1}%"))
+            .unwrap_or_else(|| "unknown".to_string());
+        println!(
+            "{:<28} {:<14} {:<10} confidence={}",
+            row.email, row.pool, pct, row.confidence
+        );
     }
     0
 }
@@ -314,23 +385,44 @@ pub fn cmd_backup(ctx: &AppContext, m: &ArgMatches) -> i32 {
     match sub {
         "export" => {
             let include_secrets = opt_flag(sub_m, "include_secrets");
-            let target = opt_str(sub_m, "output").or_else(|| opt_str(sub_m, "file")).unwrap_or("agy-swap-rs-backup.json");
+            let target = opt_str(sub_m, "output")
+                .or_else(|| opt_str(sub_m, "file"))
+                .unwrap_or("agy-swap-rs-backup.json");
             if target == "-" {
-                let bundle = match export_backup(&ctx.store, &ctx.vault, include_secrets, pass.as_deref(), now_unix) {
+                let bundle = match export_backup(
+                    &ctx.store,
+                    &ctx.vault,
+                    include_secrets,
+                    pass.as_deref(),
+                    now_unix,
+                ) {
                     Ok(b) => b,
                     Err(err) => return ctx.fail("backup export", err),
                 };
-                println!("{}", serde_json::to_string_pretty(&bundle).unwrap_or_default());
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&bundle).unwrap_or_default()
+                );
                 return 0;
             }
-            let bundle = match export_backup_to_file(target, &ctx.store, &ctx.vault, include_secrets, pass.as_deref(), now_unix) {
+            let bundle = match export_backup_to_file(
+                target,
+                &ctx.store,
+                &ctx.vault,
+                include_secrets,
+                pass.as_deref(),
+                now_unix,
+            ) {
                 Ok(b) => b,
                 Err(err) => return ctx.fail("backup export", err),
             };
             if ctx.json {
                 return ctx.ok_json("backup export", json!({"path": target, "contains_secrets": bundle.contains_secrets, "accounts": bundle.accounts.len()}));
             }
-            println!("Backup written to {target} (contains_secrets={}).", bundle.contains_secrets);
+            println!(
+                "Backup written to {target} (contains_secrets={}).",
+                bundle.contains_secrets
+            );
             0
         }
         "import" => {
@@ -338,14 +430,24 @@ pub fn cmd_backup(ctx: &AppContext, m: &ArgMatches) -> i32 {
                 return ctx.fail("backup import", "missing backup FILE");
             };
             let merge = opt_flag(sub_m, "merge");
-            let summary = match import_backup_from_file(file, &ctx.paths, &ctx.store, &ctx.vault, pass.as_deref(), merge) {
+            let summary = match import_backup_from_file(
+                file,
+                &ctx.paths,
+                &ctx.store,
+                &ctx.vault,
+                pass.as_deref(),
+                merge,
+            ) {
                 Ok(s) => s,
                 Err(err) => return ctx.fail("backup import", err),
             };
             if ctx.json {
                 return ctx.ok_json("backup import", json!(summary));
             }
-            println!("Imported {} account(s); restored {} vault secret(s).", summary.accounts_count, summary.secrets_restored);
+            println!(
+                "Imported {} account(s); restored {} vault secret(s).",
+                summary.accounts_count, summary.secrets_restored
+            );
             0
         }
         "verify" => {
@@ -365,7 +467,10 @@ pub fn cmd_backup(ctx: &AppContext, m: &ArgMatches) -> i32 {
                 Err(err) => return ctx.fail("backup verify", err),
             };
             if ctx.json {
-                return ctx.ok_json("backup verify", json!({"valid": true, "secrets": secret_count}));
+                return ctx.ok_json(
+                    "backup verify",
+                    json!({"valid": true, "secrets": secret_count}),
+                );
             }
             println!("Backup valid ({secret_count} encrypted secret(s)).");
             0
@@ -385,15 +490,29 @@ pub fn cmd_statusline(ctx: &AppContext, m: &ArgMatches) -> i32 {
                         Err(err) => return ctx.fail("statusline render", err),
                     },
                     _ => {
-                        let accounts = ctx.store.load().unwrap_or_else(|_| agy_core::Accounts::new());
+                        let accounts = ctx
+                            .store
+                            .load()
+                            .unwrap_or_else(|_| agy_core::Accounts::new());
                         let active = ctx.active_email(&accounts);
-                        render_statusline(&accounts, active.as_deref(), agy_core::paths::wall_unix_secs())
+                        render_statusline(
+                            &accounts,
+                            active.as_deref(),
+                            agy_core::paths::wall_unix_secs(),
+                        )
                     }
                 }
             } else {
-                let accounts = ctx.store.load().unwrap_or_else(|_| agy_core::Accounts::new());
+                let accounts = ctx
+                    .store
+                    .load()
+                    .unwrap_or_else(|_| agy_core::Accounts::new());
                 let active = ctx.active_email(&accounts);
-                render_statusline(&accounts, active.as_deref(), agy_core::paths::wall_unix_secs())
+                render_statusline(
+                    &accounts,
+                    active.as_deref(),
+                    agy_core::paths::wall_unix_secs(),
+                )
             };
             if ctx.json {
                 return ctx.ok_json("statusline render", json!({"text": line}));
@@ -408,7 +527,10 @@ pub fn cmd_statusline(ctx: &AppContext, m: &ArgMatches) -> i32 {
                 Err(err) => return ctx.fail("statusline install", err),
             };
             if ctx.json {
-                return ctx.ok_json("statusline install", json!({"installed": true, "tool": tool, "path": dest}));
+                return ctx.ok_json(
+                    "statusline install",
+                    json!({"installed": true, "tool": tool, "path": dest}),
+                );
             }
             println!("Installed statusline integration ({tool}) in {dest}");
             0
@@ -430,7 +552,10 @@ pub fn cmd_metrics(ctx: &AppContext, m: &ArgMatches) -> i32 {
     let now_unix = agy_core::paths::wall_unix_secs();
     let prom = render_prometheus_metrics(&accounts, active.as_deref(), now_unix);
     if ctx.json || fmt.eq_ignore_ascii_case("json") {
-        return ctx.ok_json("metrics", json!({"active": active, "account_count": accounts.len(), "prometheus": prom}));
+        return ctx.ok_json(
+            "metrics",
+            json!({"active": active, "account_count": accounts.len(), "prometheus": prom}),
+        );
     }
     print!("{prom}");
     0
@@ -449,12 +574,18 @@ pub fn cmd_install_agy(ctx: &AppContext, m: &ArgMatches) -> i32 {
     if ctx.json {
         return ctx.ok_json("install-agy", json!({"path": installed}));
     }
-    println!("{}✓ Installed agy at {installed}{}", ctx.palette.green, ctx.palette.reset);
+    println!(
+        "{}✓ Installed agy at {installed}{}",
+        ctx.palette.green, ctx.palette.reset
+    );
     0
 }
 
 pub fn cmd_update(ctx: &AppContext, m: &ArgMatches) -> i32 {
-    let check_only = opt_flag(m, "check") || opt_str(m, "mode").map(|s| s.eq_ignore_ascii_case("check")).unwrap_or(false);
+    let check_only = opt_flag(m, "check")
+        || opt_str(m, "mode")
+            .map(|s| s.eq_ignore_ascii_case("check"))
+            .unwrap_or(false);
     let http = match HttpClient::new() {
         Ok(h) => h,
         Err(err) => return ctx.fail("update", err),
@@ -480,7 +611,10 @@ pub fn cmd_version(as_json: bool) -> i32 {
 }
 
 pub fn cmd_completion(m: &ArgMatches, as_json: bool) -> i32 {
-    let shell = opt_str(m, "shell").unwrap_or("bash").trim().to_ascii_lowercase();
+    let shell = opt_str(m, "shell")
+        .unwrap_or("bash")
+        .trim()
+        .to_ascii_lowercase();
     let cmds = "add login import-current list limits limit switch next remove status logout verify account alias tag profile bind recommend ensure-active resolve-route rotate-after-failure quota-policy switch-mode run doctor config watch ack-restart history stats forecast backup statusline metrics install-agy update version completion";
     let script = match shell.as_str() {
         "bash" => format!("_agy_swap_rs_complete() {{ COMPREPLY=($(compgen -W '{cmds}' -- \"${{COMP_WORDS[COMP_CWORD]}}\")); }}; complete -F _agy_swap_rs_complete agy-swap-rs"),
@@ -503,7 +637,10 @@ pub fn cmd_completion(m: &ArgMatches, as_json: bool) -> i32 {
 pub fn cmd_dump_frame(ctx: &AppContext, m: &ArgMatches) -> i32 {
     let raw_size = opt_str(m, "size").unwrap_or("120x36");
     let Some((w_str, h_str)) = raw_size.split_once(['x', 'X']) else {
-        return ctx.fail("__dump-frame", format!("invalid size {raw_size:?} (expected WxH)"));
+        return ctx.fail(
+            "__dump-frame",
+            format!("invalid size {raw_size:?} (expected WxH)"),
+        );
     };
     let (Ok(w), Ok(h)) = (w_str.trim().parse::<u16>(), h_str.trim().parse::<u16>()) else {
         return ctx.fail("__dump-frame", format!("invalid dimensions {raw_size:?}"));
