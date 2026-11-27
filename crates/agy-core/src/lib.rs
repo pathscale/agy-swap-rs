@@ -51,7 +51,7 @@ pub use session::SessionManager;
 pub use store::{atomic_write_private, FileLock, Store};
 pub use vault::{Vault, VaultMode};
 
-pub const VERSION: &str = "0.1.0";
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {
